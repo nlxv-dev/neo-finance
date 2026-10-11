@@ -1,3 +1,7 @@
-# neo-finance
+ https://nlxv-dev.github.io/neo-finance/
 
-[![Open in Bolt](https://bolt.new/static/open-in-bolt.svg)](https://bolt.new/~/sb1-z12flhze)
+ # Neo Finance
+
+A personal, local-first financial management tool built for intuitive budget and transaction tracking.
+
+*Non-commercial — just my own developer pet project.*
