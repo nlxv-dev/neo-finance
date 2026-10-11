@@ -57,6 +57,26 @@ export function useTransactions(initialBalance: number) {
     setTransactions([]);
   }, []);
 
+  const updateTransaction = useCallback((id: number, updates: Partial<TransactionInput>) => {
+    setTransactions((prev) =>
+      prev.map((tx) =>
+        tx.id === id
+          ? {
+              ...tx,
+              amount: updates.amount ?? tx.amount,
+              category: updates.category ?? tx.category,
+              title: updates.category ?? tx.title,
+              isIncome: updates.isIncome ?? tx.isIncome,
+            }
+          : tx
+      )
+    );
+  }, []);
+
+  const deleteTransaction = useCallback((id: number) => {
+    setTransactions((prev) => prev.filter((tx) => tx.id !== id));
+  }, []);
+
   const totalIncome = transactions
     .filter((t) => t.isIncome)
     .reduce((sum, t) => sum + t.amount, 0);
@@ -71,6 +91,8 @@ export function useTransactions(initialBalance: number) {
     transactions,
     addTransaction,
     resetTransactions,
+    updateTransaction,
+    deleteTransaction,
     totalIncome,
     totalExpenses,
     totalBalance,

@@ -4,9 +4,10 @@ import { formatCurrency, getIconForCategory, type Transaction } from '@/data/moc
 
 interface TransactionListProps {
   transactions: Transaction[];
+  onSelect?: (tx: Transaction) => void;
 }
 
-export function TransactionList({ transactions }: TransactionListProps) {
+export function TransactionList({ transactions, onSelect }: TransactionListProps) {
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all');
 
   const filtered = transactions.filter((t) => {
@@ -45,7 +46,7 @@ export function TransactionList({ transactions }: TransactionListProps) {
           </p>
         ) : (
           filtered.map((tx, i) => (
-            <TransactionRow key={tx.id} tx={tx} index={i} />
+            <TransactionRow key={tx.id} tx={tx} index={i} onSelect={onSelect} />
           ))
         )}
       </div>
@@ -53,13 +54,23 @@ export function TransactionList({ transactions }: TransactionListProps) {
   );
 }
 
-function TransactionRow({ tx, index }: { tx: Transaction; index: number }) {
+function TransactionRow({
+  tx,
+  index,
+  onSelect,
+}: {
+  tx: Transaction;
+  index: number;
+  onSelect?: (tx: Transaction) => void;
+}) {
   const Icon = getIconForCategory(tx.category);
 
   return (
-    <div
-      className="flex items-center gap-3 rounded-2xl neu-card-sm p-3 animate-slide-up gpu"
+    <button
+      onClick={() => onSelect?.(tx)}
+      className="flex w-full items-center gap-3 rounded-2xl neu-card-sm p-3 animate-slide-up gpu transition-transform active:scale-[0.98] text-left"
       style={{ animationDelay: `${index * 40}ms` }}
+      aria-label={`Транзакция: ${tx.title}`}
     >
       <div
         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
@@ -99,6 +110,6 @@ function TransactionRow({ tx, index }: { tx: Transaction; index: number }) {
           {formatCurrency(tx.amount)} ₽
         </span>
       </div>
-    </div>
+    </button>
   );
 }

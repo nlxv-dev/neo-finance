@@ -9,7 +9,8 @@ import { TabBar } from '@/components/TabBar';
 import { TransactionList } from '@/components/TransactionList';
 import { AddTransactionSheet } from '@/components/AddTransactionSheet';
 import { ProfileSheet } from '@/components/ProfileSheet';
-import { formatCurrency, MONTHLY_BUDGET } from '@/data/mockData';
+import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
+import { formatCurrency, MONTHLY_BUDGET, type Transaction } from '@/data/mockData';
 
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
@@ -21,7 +22,8 @@ function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const { userName, initialBalance, updateName, updateInitialBalance } = useProfile();
-  const { transactions, addTransaction, resetTransactions, totalIncome, totalExpenses, totalBalance } = useTransactions(initialBalance);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const { transactions, addTransaction, resetTransactions, updateTransaction, deleteTransaction, totalIncome, totalExpenses, totalBalance } = useTransactions(initialBalance);
 
   const monthlyGrowth = totalIncome - totalExpenses;
   const safeToSpend = Math.max(0, MONTHLY_BUDGET - totalExpenses);
@@ -42,6 +44,23 @@ function App() {
   const handleResetData = useCallback(() => {
     resetTransactions();
   }, [resetTransactions]);
+
+  const handleUpdateTransaction = useCallback(
+    (id: number, updates: { amount: number; category: string; isIncome: boolean }) => {
+      updateTransaction(id, updates);
+      setSelectedTransaction((prev) =>
+        prev && prev.id === id ? { ...prev, ...updates, title: updates.category } : prev
+      );
+    },
+    [updateTransaction]
+  );
+
+  const handleDeleteTransaction = useCallback(
+    (id: number) => {
+      deleteTransaction(id);
+    },
+    [deleteTransaction]
+  );
 
   return (
     <div className="relative min-h-screen bg-white dark:bg-amoled transition-colors duration-300">
@@ -190,7 +209,7 @@ function App() {
 
         {/* === BOTTOM SECTION (Transactions + Tab Bar) === */}
         <section className="px-5">
-          <TransactionList transactions={transactions} />
+          <TransactionList transactions={transactions} onSelect={setSelectedTransaction} />
         </section>
       </div>
 
@@ -202,6 +221,14 @@ function App() {
         open={isSheetOpen}
         onClose={() => setIsSheetOpen(false)}
         onSave={handleSaveTransaction}
+      />
+
+      {/* Transaction Detail / Edit / Delete Bottom Sheet */}
+      <TransactionDetailSheet
+        transaction={selectedTransaction}
+        onClose={() => setSelectedTransaction(null)}
+        onUpdate={handleUpdateTransaction}
+        onDelete={handleDeleteTransaction}
       />
 
       {/* Profile & Settings Bottom Sheet */}
