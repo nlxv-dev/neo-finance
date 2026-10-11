@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Sun, Moon, TrendingUp, ArrowUpRight, ArrowDownRight, Eye, EyeOff, ChevronRight, Pencil } from 'lucide-react';
+import { Sun, Moon, TrendingUp, ArrowUpRight, ArrowDownRight, ChevronRight, Pencil } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useProfile } from '@/hooks/useProfile';
@@ -18,7 +18,6 @@ const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель',
 function App() {
   const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('home');
-  const [balanceVisible, setBalanceVisible] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isBalanceAdjustOpen, setIsBalanceAdjustOpen] = useState(false);
@@ -89,7 +88,7 @@ function App() {
         <header className="relative overflow-hidden px-5 pt-12 pb-8">
           <ParticleBackground isDark={theme === 'dark'} />
 
-          {/* Theme switcher + balance visibility */}
+          {/* Theme switcher */}
           <div className="relative z-10 flex items-center justify-between">
             {/* Clickable profile block */}
             <button
@@ -110,17 +109,6 @@ function App() {
             </button>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setBalanceVisible((v) => !v)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm transition-transform active:scale-90 gpu"
-                aria-label="Скрыть баланс"
-              >
-                {balanceVisible ? (
-                  <Eye className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
-                ) : (
-                  <EyeOff className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
-                )}
-              </button>
               <button
                 onClick={toggleTheme}
                 className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm transition-transform active:scale-90 gpu"
@@ -146,12 +134,10 @@ function App() {
               aria-label="Корректировка баланса"
             >
               <h1 className="font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums">
-                {balanceVisible ? formatCurrency(totalBalance) : '•• ••••'}
+                {formatCurrency(totalBalance)}
                 <span className="ml-1.5 text-2xl text-neutral-400 dark:text-neutral-500">₽</span>
               </h1>
-              {balanceVisible && (
-                <Pencil className="mb-2 h-4 w-4 text-neutral-300 transition-colors group-hover:text-neutral-400 dark:text-neutral-600 dark:group-hover:text-neutral-400" />
-              )}
+              <Pencil className="mb-2 h-4 w-4 text-neutral-300 transition-colors group-hover:text-neutral-400 dark:text-neutral-600 dark:group-hover:text-neutral-400" />
             </button>
 
             {/* Monthly growth pill */}
