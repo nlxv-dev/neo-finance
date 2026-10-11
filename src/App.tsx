@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Sun, Moon, TrendingUp, ArrowUpRight, ArrowDownRight, Eye, EyeOff, ChevronRight } from 'lucide-react';
+import { Sun, Moon, TrendingUp, ArrowUpRight, ArrowDownRight, Eye, EyeOff, ChevronRight, Pencil } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useProfile } from '@/hooks/useProfile';
@@ -10,6 +10,7 @@ import { TransactionList } from '@/components/TransactionList';
 import { AddTransactionSheet } from '@/components/AddTransactionSheet';
 import { ProfileSheet } from '@/components/ProfileSheet';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
+import { BalanceAdjustSheet } from '@/components/BalanceAdjustSheet';
 import { formatCurrency, MONTHLY_BUDGET, type Transaction } from '@/data/mockData';
 
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
@@ -20,6 +21,7 @@ function App() {
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isBalanceAdjustOpen, setIsBalanceAdjustOpen] = useState(false);
 
   const { userName, initialBalance, updateName, updateInitialBalance } = useProfile();
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
@@ -44,6 +46,17 @@ function App() {
   const handleResetData = useCallback(() => {
     resetTransactions();
   }, [resetTransactions]);
+
+  const handleBalanceAdjust = useCallback(
+    (difference: number) => {
+      addTransaction({
+        amount: Math.abs(difference),
+        category: 'Корректировка баланса',
+        isIncome: difference > 0,
+      });
+    },
+    [addTransaction]
+  );
 
   const handleUpdateTransaction = useCallback(
     (id: number, updates: { amount: number; category: string; isIncome: boolean }) => {
@@ -116,17 +129,24 @@ function App() {
             </div>
           </div>
 
-          {/* Balance display */}
+          {/* Balance display — clickable to adjust */}
           <div className="relative z-10 mt-8 animate-fade-in-up">
             <p className="text-xs font-medium uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
               Общий баланс
             </p>
-            <div className="mt-1.5 flex items-end gap-2">
+            <button
+              onClick={() => setIsBalanceAdjustOpen(true)}
+              className="group mt-1.5 flex items-end gap-2 transition-transform active:scale-95 gpu"
+              aria-label="Корректировка баланса"
+            >
               <h1 className="font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums">
                 {balanceVisible ? formatCurrency(totalBalance) : '•• ••••'}
                 <span className="ml-1.5 text-2xl text-neutral-400 dark:text-neutral-500">₽</span>
               </h1>
-            </div>
+              {balanceVisible && (
+                <Pencil className="mb-2 h-4 w-4 text-neutral-300 transition-colors group-hover:text-neutral-400 dark:text-neutral-600 dark:group-hover:text-neutral-400" />
+              )}
+            </button>
 
             {/* Monthly growth pill */}
             <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-mint/10 dark:bg-mint/10 px-3 py-1.5">
@@ -229,6 +249,14 @@ function App() {
         onClose={() => setSelectedTransaction(null)}
         onUpdate={handleUpdateTransaction}
         onDelete={handleDeleteTransaction}
+      />
+
+      {/* Balance Adjust Bottom Sheet */}
+      <BalanceAdjustSheet
+        open={isBalanceAdjustOpen}
+        onClose={() => setIsBalanceAdjustOpen(false)}
+        currentBalance={totalBalance}
+        onAdjust={handleBalanceAdjust}
       />
 
       {/* Profile & Settings Bottom Sheet */}
