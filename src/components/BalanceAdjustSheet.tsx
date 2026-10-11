@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Check, Wallet, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { X, Check, Wallet, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import { formatCurrency } from '@/data/mockData';
 
 interface BalanceAdjustSheetProps {
@@ -15,12 +15,14 @@ export function BalanceAdjustSheet({
   currentBalance,
   onAdjust,
 }: BalanceAdjustSheetProps) {
-  const [input, setInput] = useState('');
+  const [isNegative, setIsNegative] = useState(false);
+  const [digits, setDigits] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
-      setInput(String(currentBalance));
+      setIsNegative(currentBalance < 0);
+      setDigits(String(Math.abs(currentBalance)));
       const timer = setTimeout(() => inputRef.current?.focus(), 350);
       return () => clearTimeout(timer);
     }
@@ -33,7 +35,8 @@ export function BalanceAdjustSheet({
     }
   }, [open]);
 
-  const targetAmount = parseInt(input.replace(/\D/g, ''), 10) || 0;
+  const rawAmount = parseInt(digits || '0', 10) || 0;
+  const targetAmount = isNegative ? -rawAmount : rawAmount;
   const difference = targetAmount - currentBalance;
 
   const handleSave = () => {
@@ -67,7 +70,7 @@ export function BalanceAdjustSheet({
             ? 'translate-y-0 pointer-events-auto opacity-100'
             : 'translate-y-full pointer-events-none opacity-0'
         }`}
-        style={{ height: '52vh' }}
+        style={{ height: '54vh' }}
       >
         {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-2">
@@ -94,29 +97,45 @@ export function BalanceAdjustSheet({
 
           {/* Amount input */}
           <div className="mt-6 flex flex-col items-center">
-          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-            <Wallet className="h-3 w-3" />
-            Новый баланс
-          </div>
+            <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+              <Wallet className="h-3 w-3" />
+              Новый баланс
+            </div>
             <div className="flex items-baseline justify-center">
+              {isNegative && (
+                <span className="text-4xl font-light text-red-500 dark:text-red-400">-</span>
+              )}
               <input
                 ref={inputRef}
                 type="text"
                 inputMode="numeric"
-                value={input ? formatCurrency(parseInt(input.replace(/\D/g, ''), 10)) : ''}
+                value={digits ? formatCurrency(parseInt(digits, 10)) : ''}
                 onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, '');
-                  setInput(digits.slice(0, 9));
+                  const cleaned = e.target.value.replace(/\D/g, '').slice(0, 9);
+                  setDigits(cleaned);
                 }}
                 placeholder="0"
                 className="w-full bg-transparent text-center font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums outline-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700"
               />
               <span className="ml-1 text-2xl font-light text-neutral-400 dark:text-neutral-500">₽</span>
             </div>
+
+            {/* Sign toggle */}
+            <button
+              onClick={() => setIsNegative((v) => !v)}
+              className={`mt-3 flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-all duration-200 active:scale-95 gpu ${
+                isNegative
+                  ? 'bg-red-500/10 text-red-500 dark:text-red-400'
+                  : 'neu-inset text-neutral-400 dark:text-neutral-500'
+              }`}
+            >
+              <Minus className="h-3 w-3" />
+              {isNegative ? 'Отрицательный' : 'Сделать отрицательным'}
+            </button>
           </div>
 
           {/* Difference indicator */}
-          <div className="mt-5 flex flex-col items-center">
+          <div className="mt-4 flex flex-col items-center">
             <div className="flex items-center gap-1.5 text-xs text-neutral-400 dark:text-neutral-500">
               <span>Текущий: {formatCurrency(currentBalance)} ₽</span>
             </div>

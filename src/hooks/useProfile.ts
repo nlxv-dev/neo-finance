@@ -44,7 +44,7 @@ export function useProfile() {
   }, []);
 
   const updateInitialBalance = useCallback((balance: number) => {
-    setInitialBalance(Math.max(0, Math.round(balance)));
+    setInitialBalance(Math.round(balance));
   }, []);
 
   return {
