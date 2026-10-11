@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    margin: 0;
+    overscroll-behavior: none;
+  }
+}
+
+@layer components {
+  /* ===== Neumorphic Card (Light Mode) ===== */
+  .neu-card {
+    background: #ffffff;
+    box-shadow:
+      -6px -6px 14px rgba(255, 255, 255, 0.95),
+      6px 6px 14px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.02);
+  }
+
+  .neu-card-sm {
+    background: #ffffff;
+    box-shadow:
+      -4px -4px 10px rgba(255, 255, 255, 0.9),
+      4px 4px 10px rgba(0, 0, 0, 0.04);
+  }
+
+  .neu-inset {
+    background: #f5f5f7;
+    box-shadow:
+      inset -3px -3px 7px rgba(255, 255, 255, 0.9),
+      inset 3px 3px 7px rgba(0, 0, 0, 0.04);
+  }
+
+  /* ===== Dark Mode Card ===== */
+  .dark .neu-card {
+    background: #121214;
+    box-shadow: none;
+    border: 0.5px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .dark .neu-card-sm {
+    background: #121214;
+    box-shadow: none;
+    border: 0.5px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .dark .neu-inset {
+    background: #0a0a0c;
+    box-shadow:
+      inset 0 1px 3px rgba(0, 0, 0, 0.6),
+      inset 0 -1px 1px rgba(255, 255, 255, 0.03);
+    border: 0.5px solid rgba(255, 255, 255, 0.04);
+  }
+
+  /* ===== Frosted Glass Tab Bar ===== */
+  /*
+   * Light mode: semi-transparent white + blur so content bleeds through.
+   * Dark mode: near-invisible white tint + same blur.
+   * NO solid color fallbacks — glassmorphism only.
+   */
+  .glass-bar {
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    background: rgba(255, 255, 255, 0.72);
+    border: 0.5px solid rgba(255, 255, 255, 0.9);
+    box-shadow:
+      0 2px 24px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .dark .glass-bar {
+    background: rgba(255, 255, 255, 0.05);
+    border: 0.5px solid rgba(255, 255, 255, 0.10);
+    box-shadow:
+      0 2px 24px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* ===== Tab Bar center "+" button — dark mode override ===== */
+  .dark .plus-btn {
+    background: rgba(255, 255, 255, 0.07) !important;
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.15),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.35),
+      0 6px 16px rgba(0, 0, 0, 0.35) !important;
+    border: 0.5px solid rgba(255, 255, 255, 0.12) !important;
+  }
+
+  /* ===== Bottom Sheet Glass ===== */
+  .sheet-glass {
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    background: rgba(255, 255, 255, 0.92);
+    border-top: 0.5px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.08);
+  }
+
+  .dark .sheet-glass {
+    background: rgba(18, 18, 20, 0.85);
+    border-top: 0.5px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  /* ===== Custom Scrollbar ===== */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .gpu {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  .particle-light {
+    mix-blend-mode: multiply;
+  }
+
+  .particle-dark {
+    mix-blend-mode: screen;
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, #4ade80, #6366f1);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
