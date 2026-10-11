@@ -11,7 +11,7 @@ import { AddTransactionSheet } from '@/components/AddTransactionSheet';
 import { ProfileSheet } from '@/components/ProfileSheet';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { BalanceAdjustSheet } from '@/components/BalanceAdjustSheet';
-import { formatCurrency, MONTHLY_BUDGET, type Transaction } from '@/data/mockData';
+import { formatCurrency, MONTHLY_BUDGET, getBudgetStatus, type Transaction } from '@/data/mockData';
 
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
@@ -28,8 +28,17 @@ function App() {
   const { transactions, addTransaction, resetTransactions, updateTransaction, deleteTransaction, totalIncome, totalExpenses, totalBalance } = useTransactions(initialBalance);
 
   const monthlyGrowth = totalIncome - totalExpenses;
-  const safeToSpend = Math.max(0, MONTHLY_BUDGET - totalExpenses);
-  const budgetPercent = Math.min(100, (totalExpenses / MONTHLY_BUDGET) * 100);
+  const safeToSpend = MONTHLY_BUDGET - totalExpenses;
+  const budgetPercent = (totalExpenses / MONTHLY_BUDGET) * 100;
+  const budgetStatus = getBudgetStatus(totalExpenses, MONTHLY_BUDGET);
+  const isOverbudget = totalExpenses > MONTHLY_BUDGET;
+  const progressGradient =
+    budgetStatus === 'normal'
+      ? 'from-mint to-indigoblue'
+      : budgetStatus === 'warning'
+      ? 'from-amber-500 to-orange-400'
+      : 'from-red-500 to-red-500';
+  const progressWidth = Math.min(100, budgetPercent);
 
   const monthLabel = useMemo(() => {
     const now = new Date();
@@ -48,14 +57,11 @@ function App() {
   }, [resetTransactions]);
 
   const handleBalanceAdjust = useCallback(
-    (difference: number) => {
-      addTransaction({
-        amount: Math.abs(difference),
-        category: 'Корректировка баланса',
-        isIncome: difference > 0,
-      });
+    (targetBalance: number) => {
+      const newInitialBalance = targetBalance - totalIncome + totalExpenses;
+      updateInitialBalance(newInitialBalance);
     },
-    [addTransaction]
+    [updateInitialBalance, totalIncome, totalExpenses]
   );
 
   const handleUpdateTransaction = useCallback(
@@ -215,13 +221,17 @@ function App() {
             <div className="mt-2 px-2">
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800/50">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-mint to-indigoblue transition-all duration-1000 ease-out"
-                  style={{ width: `${budgetPercent}%` }}
+                  className={`h-full rounded-full bg-gradient-to-r ${progressGradient} transition-all duration-1000 ease-out`}
+                  style={{ width: `${progressWidth}%` }}
                 />
               </div>
               <div className="mt-2 flex justify-between text-[10px] text-neutral-400 dark:text-neutral-500">
                 <span>{formatCurrency(totalExpenses)} ₽ потрачено</span>
-                <span>{formatCurrency(Math.max(0, MONTHLY_BUDGET - totalExpenses))} ₽ осталось</span>
+                <span className={isOverbudget ? 'text-red-500 dark:text-red-400 font-medium' : ''}>
+                  {isOverbudget
+                    ? `-${formatCurrency(totalExpenses - MONTHLY_BUDGET)} ₽ перерасход`
+                    : `${formatCurrency(Math.max(0, MONTHLY_BUDGET - totalExpenses))} ₽ осталось`}
+                </span>
               </div>
             </div>
           </div>

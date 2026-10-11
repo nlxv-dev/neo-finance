@@ -57,6 +57,15 @@ export const initialTransactions: Transaction[] = [
   { id: 10, title: 'Мобильная связь', category: 'Связь', amount: 1200, date: '1 окт', isIncome: false },
 ];
 
+export type BudgetStatus = 'normal' | 'warning' | 'overbudget';
+
+export function getBudgetStatus(spent: number, budget: number): BudgetStatus {
+  const pct = (spent / budget) * 100;
+  if (pct > 100) return 'overbudget';
+  if (pct >= 80) return 'warning';
+  return 'normal';
+}
+
 export function formatCurrency(amount: number): string {
   return amount.toLocaleString('ru-RU');
 }

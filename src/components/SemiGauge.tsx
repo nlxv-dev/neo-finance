@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
+import { getBudgetStatus, type BudgetStatus } from '@/data/mockData';
 
 interface SemiGaugeProps {
   spent: number;
   budget: number;
   safeToSpend: number;
 }
+
+const gradientStops: Record<BudgetStatus, { from: string; mid: string; to: string }> = {
+  normal: { from: '#4ADE80', mid: '#05D9A4', to: '#6366F1' },
+  warning: { from: '#f59e0b', mid: '#fb923c', to: '#f59e0b' },
+  overbudget: { from: '#ef4444', mid: '#ef4444', to: '#ef4444' },
+};
 
 export function SemiGauge({ spent, budget, safeToSpend }: SemiGaugeProps) {
   const [animatedSpent, setAnimatedSpent] = useState(0);
@@ -26,7 +33,12 @@ export function SemiGauge({ spent, budget, safeToSpend }: SemiGaugeProps) {
     requestAnimationFrame(tick);
   }, [spent, budget]);
 
+  const status = getBudgetStatus(spent, budget);
+  const colors = gradientStops[status];
+  const gradientId = `tickGradient-${status}`;
+
   const totalTicks = 80;
+  const isOverbudget = spent > budget;
   const spentRatio = Math.min(animatedSpent, 1);
   const spentTicks = Math.round(spentRatio * totalTicks);
 
@@ -45,10 +57,10 @@ export function SemiGauge({ spent, budget, safeToSpend }: SemiGaugeProps) {
         className="gpu"
       >
         <defs>
-          <linearGradient id="tickGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#4ADE80" />
-            <stop offset="50%" stopColor="#05D9A4" />
-            <stop offset="100%" stopColor="#6366F1" />
+          <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={colors.from} />
+            <stop offset="50%" stopColor={colors.mid} />
+            <stop offset="100%" stopColor={colors.to} />
           </linearGradient>
           <filter id="tickGlow">
             <feGaussianBlur stdDeviation="2" result="blur" />
@@ -82,7 +94,7 @@ export function SemiGauge({ spent, budget, safeToSpend }: SemiGaugeProps) {
               y1={y1}
               x2={x2}
               y2={y2}
-              stroke={isSpent ? 'url(#tickGradient)' : 'currentColor'}
+              stroke={isSpent ? `url(#${gradientId})` : 'currentColor'}
               strokeWidth={isLong ? 2.5 : 1.5}
               strokeLinecap="round"
               filter={isNearEnd ? 'url(#tickGlow)' : undefined}
@@ -103,7 +115,7 @@ export function SemiGauge({ spent, budget, safeToSpend }: SemiGaugeProps) {
           cx={140 + Math.cos(startAngle + spentRatio * (endAngle - startAngle)) * (radius - 6)}
           cy={140 + Math.sin(startAngle + spentRatio * (endAngle - startAngle)) * (radius - 6)}
           r="4"
-          fill="url(#tickGradient)"
+          fill={`url(#${gradientId})`}
           filter="url(#tickGlow)"
         />
       </svg>
@@ -111,16 +123,25 @@ export function SemiGauge({ spent, budget, safeToSpend }: SemiGaugeProps) {
       {/* Center display */}
       <div className="absolute bottom-2 left-0 right-0 flex flex-col items-center pointer-events-none">
         <span className="text-[10px] font-medium uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
-          Доступно к трате
+          {isOverbudget ? 'Перерасход' : 'Доступно к трате'}
         </span>
-        <span className="mt-1 font-light tracking-tight text-3xl text-neutral-900 dark:text-white tabular-nums">
-          {safeToSpend.toLocaleString('ru-RU')}
+        <span
+          className={`mt-1 font-light tracking-tight text-3xl tabular-nums ${
+            isOverbudget
+              ? 'text-red-500 dark:text-red-400'
+              : 'text-neutral-900 dark:text-white'
+          }`}
+        >
+          {isOverbudget ? '-' : ''}{Math.abs(safeToSpend).toLocaleString('ru-RU')}
           <span className="ml-1 text-lg text-neutral-400 dark:text-neutral-500">₽</span>
         </span>
         <div className="mt-1.5 flex items-center gap-2 text-[11px] text-neutral-400 dark:text-neutral-500">
           <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-gradient-to-r from-mint to-indigoblue" />
-            Потрачено {Math.round(spentRatio * 100)}%
+            <span
+              className="h-1.5 w-1.5 rounded-full"
+              style={{ background: status === 'normal' ? 'linear-gradient(to right, #4ADE80, #6366F1)' : status === 'warning' ? '#f59e0b' : '#ef4444' }}
+            />
+            Потрачено {Math.round((spent / budget) * 100)}%
           </span>
           <span className="opacity-40">|</span>
           <span>Бюджет {budget.toLocaleString('ru-RU')} ₽</span>

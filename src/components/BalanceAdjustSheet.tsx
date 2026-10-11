@@ -6,7 +6,7 @@ interface BalanceAdjustSheetProps {
   open: boolean;
   onClose: () => void;
   currentBalance: number;
-  onAdjust: (difference: number) => void;
+  onAdjust: (targetBalance: number) => void;
 }
 
 export function BalanceAdjustSheet({
@@ -41,7 +41,7 @@ export function BalanceAdjustSheet({
       onClose();
       return;
     }
-    onAdjust(difference);
+    onAdjust(targetAmount);
     onClose();
   };
 
