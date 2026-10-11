@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   type Transaction,
   initialTransactions,
-  INITIAL_BALANCE,
 } from '@/data/mockData';
 
 const STORAGE_KEY = 'fintrack-transactions';
@@ -26,7 +25,7 @@ export interface TransactionInput {
   isIncome: boolean;
 }
 
-export function useTransactions() {
+export function useTransactions(initialBalance: number) {
   const [transactions, setTransactions] = useState<Transaction[]>(loadTransactions);
 
   useEffect(() => {
@@ -54,7 +53,10 @@ export function useTransactions() {
     setTransactions((prev) => [newTx, ...prev]);
   }, []);
 
-  // Derived metrics
+  const resetTransactions = useCallback(() => {
+    setTransactions([]);
+  }, []);
+
   const totalIncome = transactions
     .filter((t) => t.isIncome)
     .reduce((sum, t) => sum + t.amount, 0);
@@ -63,11 +65,12 @@ export function useTransactions() {
     .filter((t) => !t.isIncome)
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalBalance = INITIAL_BALANCE + totalIncome - totalExpenses;
+  const totalBalance = initialBalance + totalIncome - totalExpenses;
 
   return {
     transactions,
     addTransaction,
+    resetTransactions,
     totalIncome,
     totalExpenses,
     totalBalance,

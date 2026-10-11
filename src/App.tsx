@@ -1,13 +1,15 @@
 import { useState, useCallback, useMemo } from 'react';
-import { Sun, Moon, TrendingUp, ArrowUpRight, ArrowDownRight, Eye, EyeOff } from 'lucide-react';
+import { Sun, Moon, TrendingUp, ArrowUpRight, ArrowDownRight, Eye, EyeOff, ChevronRight } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactions } from '@/hooks/useTransactions';
+import { useProfile } from '@/hooks/useProfile';
 import { ParticleBackground } from '@/components/ParticleBackground';
 import { SemiGauge } from '@/components/SemiGauge';
 import { TabBar } from '@/components/TabBar';
 import { TransactionList } from '@/components/TransactionList';
 import { AddTransactionSheet } from '@/components/AddTransactionSheet';
-import { formatCurrency, MONTHLY_BUDGET, INITIAL_BALANCE } from '@/data/mockData';
+import { ProfileSheet } from '@/components/ProfileSheet';
+import { formatCurrency, MONTHLY_BUDGET } from '@/data/mockData';
 
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
@@ -16,8 +18,10 @@ function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  const { transactions, addTransaction, totalIncome, totalExpenses, totalBalance } = useTransactions();
+  const { userName, initialBalance, updateName, updateInitialBalance } = useProfile();
+  const { transactions, addTransaction, resetTransactions, totalIncome, totalExpenses, totalBalance } = useTransactions(initialBalance);
 
   const monthlyGrowth = totalIncome - totalExpenses;
   const safeToSpend = Math.max(0, MONTHLY_BUDGET - totalExpenses);
@@ -35,6 +39,10 @@ function App() {
     [addTransaction]
   );
 
+  const handleResetData = useCallback(() => {
+    resetTransactions();
+  }, [resetTransactions]);
+
   return (
     <div className="relative min-h-screen bg-white dark:bg-amoled transition-colors duration-300">
       {/* Scrollable container */}
@@ -45,15 +53,23 @@ function App() {
 
           {/* Theme switcher + balance visibility */}
           <div className="relative z-10 flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            {/* Clickable profile block */}
+            <button
+              onClick={() => setIsProfileOpen(true)}
+              className="flex items-center gap-2 transition-transform active:scale-95 gpu"
+              aria-label="Открыть профиль"
+            >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm">
                 <span className="text-sm font-bold gradient-text">F</span>
               </div>
-              <div>
+              <div className="text-left">
                 <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Добро пожаловать</p>
-                <p className="text-sm font-semibold text-neutral-900 dark:text-white">Иван Петров</p>
+                <div className="flex items-center gap-0.5">
+                  <p className="text-sm font-semibold text-neutral-900 dark:text-white">{userName}</p>
+                  <ChevronRight className="h-3 w-3 text-neutral-400 dark:text-neutral-500" />
+                </div>
               </div>
-            </div>
+            </button>
 
             <div className="flex items-center gap-2">
               <button
@@ -186,6 +202,17 @@ function App() {
         open={isSheetOpen}
         onClose={() => setIsSheetOpen(false)}
         onSave={handleSaveTransaction}
+      />
+
+      {/* Profile & Settings Bottom Sheet */}
+      <ProfileSheet
+        open={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        userName={userName}
+        initialBalance={initialBalance}
+        onUpdateName={updateName}
+        onUpdateInitialBalance={updateInitialBalance}
+        onResetData={handleResetData}
       />
     </div>
   );
