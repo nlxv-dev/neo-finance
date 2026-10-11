@@ -3,8 +3,8 @@ import { useState, useCallback, useEffect } from 'react';
 const NAME_KEY = 'fintrack-user-name';
 const BALANCE_KEY = 'fintrack-initial-balance';
 
-const DEFAULT_NAME = 'Иван Петров';
-const DEFAULT_BALANCE = 70000;
+const DEFAULT_NAME = 'Пользователь';
+const DEFAULT_BALANCE = 0;
 
 function loadName(): string {
   try {
@@ -40,7 +40,7 @@ export function useProfile() {
   }, [initialBalance]);
 
   const updateName = useCallback((name: string) => {
-    setUserName(name.trim() || DEFAULT_NAME);
+    setUserName(name.trim() || 'Пользователь');
   }, []);
 
   const updateInitialBalance = useCallback((balance: number) => {
