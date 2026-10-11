@@ -1,12 +1,15 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Sun, Moon, TrendingUp, ArrowUpRight, ArrowDownRight, Eye, EyeOff } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { useTransactions } from '@/hooks/useTransactions';
 import { ParticleBackground } from '@/components/ParticleBackground';
 import { SemiGauge } from '@/components/SemiGauge';
 import { TabBar } from '@/components/TabBar';
 import { TransactionList } from '@/components/TransactionList';
 import { AddTransactionSheet } from '@/components/AddTransactionSheet';
-import { balanceData, formatCurrency } from '@/data/mockData';
+import { formatCurrency, MONTHLY_BUDGET, INITIAL_BALANCE } from '@/data/mockData';
+
+const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
 function App() {
   const { theme, toggleTheme } = useTheme();
@@ -14,11 +17,22 @@ function App() {
   const [balanceVisible, setBalanceVisible] = useState(true);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
+  const { transactions, addTransaction, totalIncome, totalExpenses, totalBalance } = useTransactions();
+
+  const monthlyGrowth = totalIncome - totalExpenses;
+  const safeToSpend = Math.max(0, MONTHLY_BUDGET - totalExpenses);
+  const budgetPercent = Math.min(100, (totalExpenses / MONTHLY_BUDGET) * 100);
+
+  const monthLabel = useMemo(() => {
+    const now = new Date();
+    return `${MONTHS_RU[now.getMonth()]} ${now.getFullYear()}`;
+  }, []);
+
   const handleSaveTransaction = useCallback(
     (data: { amount: number; category: string; isIncome: boolean }) => {
-      console.log('Transaction saved:', data);
+      addTransaction(data);
     },
-    []
+    [addTransaction]
   );
 
   return (
@@ -74,7 +88,7 @@ function App() {
             </p>
             <div className="mt-1.5 flex items-end gap-2">
               <h1 className="font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums">
-                {balanceVisible ? formatCurrency(balanceData.totalBalance) : '•• ••••'}
+                {balanceVisible ? formatCurrency(totalBalance) : '•• ••••'}
                 <span className="ml-1.5 text-2xl text-neutral-400 dark:text-neutral-500">₽</span>
               </h1>
             </div>
@@ -83,7 +97,7 @@ function App() {
             <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-mint/10 dark:bg-mint/10 px-3 py-1.5">
               <TrendingUp className="h-3.5 w-3.5 text-mint dark:text-mint" />
               <span className="text-xs font-medium text-mint dark:text-mint">
-                +{formatCurrency(balanceData.monthlyGrowth)} ₽ за месяц
+                {monthlyGrowth >= 0 ? '+' : ''}{formatCurrency(monthlyGrowth)} ₽ за месяц
               </span>
             </div>
           </div>
@@ -100,7 +114,7 @@ function App() {
                 </span>
               </div>
               <p className="mt-2.5 font-light tracking-tight text-2xl text-neutral-900 dark:text-white tabular-nums">
-                {formatCurrency(balanceData.income)}
+                {formatCurrency(totalIncome)}
                 <span className="ml-1 text-sm text-neutral-400 dark:text-neutral-500">₽</span>
               </p>
             </div>
@@ -115,7 +129,7 @@ function App() {
                 </span>
               </div>
               <p className="mt-2.5 font-light tracking-tight text-2xl text-neutral-900 dark:text-white tabular-nums">
-                {formatCurrency(balanceData.expenses)}
+                {formatCurrency(totalExpenses)}
                 <span className="ml-1 text-sm text-neutral-400 dark:text-neutral-500">₽</span>
               </p>
             </div>
@@ -130,15 +144,15 @@ function App() {
                 Бюджет месяца
               </h2>
               <span className="rounded-full bg-neutral-100 dark:bg-neutral-800/50 px-2.5 py-0.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">
-                Октябрь 2026
+                {monthLabel}
               </span>
             </div>
 
             <div className="flex justify-center">
               <SemiGauge
-                spent={balanceData.expenses}
-                budget={balanceData.monthlyBudget}
-                safeToSpend={balanceData.safeToSpend}
+                spent={totalExpenses}
+                budget={MONTHLY_BUDGET}
+                safeToSpend={safeToSpend}
               />
             </div>
 
@@ -147,14 +161,12 @@ function App() {
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800/50">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-mint to-indigoblue transition-all duration-1000 ease-out"
-                  style={{
-                    width: `${(balanceData.expenses / balanceData.monthlyBudget) * 100}%`,
-                  }}
+                  style={{ width: `${budgetPercent}%` }}
                 />
               </div>
               <div className="mt-2 flex justify-between text-[10px] text-neutral-400 dark:text-neutral-500">
-                <span>{formatCurrency(balanceData.expenses)} ₽ потрачено</span>
-                <span>{formatCurrency(balanceData.monthlyBudget - balanceData.expenses)} ₽ осталось</span>
+                <span>{formatCurrency(totalExpenses)} ₽ потрачено</span>
+                <span>{formatCurrency(Math.max(0, MONTHLY_BUDGET - totalExpenses))} ₽ осталось</span>
               </div>
             </div>
           </div>
@@ -162,7 +174,7 @@ function App() {
 
         {/* === BOTTOM SECTION (Transactions + Tab Bar) === */}
         <section className="px-5">
-          <TransactionList />
+          <TransactionList transactions={transactions} />
         </section>
       </div>
 

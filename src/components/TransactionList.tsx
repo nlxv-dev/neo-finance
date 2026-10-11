@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, Check } from 'lucide-react';
-import { transactions, formatCurrency, type Transaction } from '@/data/mockData';
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { formatCurrency, getIconForCategory, type Transaction } from '@/data/mockData';
 
-export function TransactionList() {
+interface TransactionListProps {
+  transactions: Transaction[];
+}
+
+export function TransactionList({ transactions }: TransactionListProps) {
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all');
 
   const filtered = transactions.filter((t) => {
@@ -35,16 +39,22 @@ export function TransactionList() {
       </div>
 
       <div className="space-y-2">
-        {filtered.map((tx, i) => (
-          <TransactionRow key={tx.id} tx={tx} index={i} />
-        ))}
+        {filtered.length === 0 ? (
+          <p className="py-8 text-center text-sm text-neutral-400 dark:text-neutral-500">
+            Нет транзакций
+          </p>
+        ) : (
+          filtered.map((tx, i) => (
+            <TransactionRow key={tx.id} tx={tx} index={i} />
+          ))
+        )}
       </div>
     </div>
   );
 }
 
 function TransactionRow({ tx, index }: { tx: Transaction; index: number }) {
-  const Icon = tx.icon;
+  const Icon = getIconForCategory(tx.category);
 
   return (
     <div
