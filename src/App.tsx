@@ -1,4 +1,5 @@
 
+import { AnimatedCounter } from '@/components/AnimatedCounter';
 import { useState, useCallback, useMemo } from 'react';
 import {
   Sun,
@@ -177,9 +178,9 @@ function App() {
               className="group mt-1.5 flex items-end gap-2 transition-transform active:scale-95 gpu"
               aria-label="Корректировка баланса"
             >
-              <h1 className="font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums">
-                {formatCurrency(totalBalance)}
-                <span className="ml-1.5 text-2xl text-neutral-400 dark:text-neutral-500">
+              <h1 className="font-light tracking-tight text-5xl text-neutral-900 dark:text-white flex items-end">
+                <AnimatedCounter value={totalBalance} />
+               <span className="ml-1.5 text-2xl text-neutral-400 dark:text-neutral-500 pb-1">
                   ₽
                 </span>
               </h1>
