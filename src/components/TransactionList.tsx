@@ -1,6 +1,8 @@
+import { IconRenderer } from '@/components/IconRenderer';
 import { useState } from 'react';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
-import { formatCurrency, getIconForCategory, type Transaction } from '@/data/mockData';
+import { useCategories } from '@/hooks/useCategories'; // Импортируем хук категорий
+import { formatCurrency, type Transaction } from '@/data/mockData';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -63,7 +65,11 @@ function TransactionRow({
   index: number;
   onSelect?: (tx: Transaction) => void;
 }) {
-  const Icon = getIconForCategory(tx.category);
+  // Подтягиваем актуальный список категорий из базы
+  const { categories } = useCategories();
+  
+  // Ищем категорию, чтобы узнать имя её иконки (например, 'CookingPot')
+  const currentCategory = categories.find((cat) => cat.name === tx.category);
 
   return (
     <button
@@ -79,11 +85,12 @@ function TransactionRow({
             : 'bg-neutral-100 dark:bg-neutral-800/50'
         }`}
       >
-        <Icon
+        {/* Заменили старый статичный тег на наш динамический IconRenderer */}
+        <IconRenderer
+          name={currentCategory?.iconName || 'HelpCircle'}
           className={`h-5 w-5 ${
             tx.isIncome ? 'text-mint dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
           }`}
-          strokeWidth={2}
         />
       </div>
 
