@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactions } from '@/hooks/useTransactions';
+import { useCategories } from '@/hooks/useCategories';
 import { useProfile } from '@/hooks/useProfile';
 import { ParticleBackground } from '@/components/ParticleBackground';
 import { SemiGauge } from '@/components/SemiGauge';
@@ -48,6 +49,7 @@ function App() {
   const [isBalanceAdjustOpen, setIsBalanceAdjustOpen] = useState(false);
 
   const { userName, initialBalance, updateName, updateInitialBalance } = useProfile();
+  const { categories, addCategory, updateCategory, deleteCategory } = useCategories();
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   const {
@@ -59,7 +61,7 @@ function App() {
     totalIncome,
     totalExpenses,
     totalBalance,
-  } = useTransactions(initialBalance);
+  } = useTransactions(initialBalance, categories);
 
   const monthlyGrowth = totalIncome - totalExpenses;
   const safeToSpend = MONTHLY_BUDGET - totalExpenses;
@@ -82,7 +84,7 @@ function App() {
   }, []);
 
   const handleSaveTransaction = useCallback(
-    (data: { amount: number; category: string; isIncome: boolean }) => {
+    (data: { amount: number; categoryId: string; isIncome: boolean }) => {
       addTransaction(data);
     },
     [addTransaction]
@@ -101,13 +103,34 @@ function App() {
   );
 
   const handleUpdateTransaction = useCallback(
-    (id: number, updates: { amount: number; category: string; isIncome: boolean }) => {
+    (id: number, updates: { amount: number; categoryId: string; isIncome: boolean }) => {
       updateTransaction(id, updates);
+      const selectedCategory = categories.find((category) => category.id === updates.categoryId);
       setSelectedTransaction((prev) =>
-        prev && prev.id === id ? { ...prev, ...updates, title: updates.category } : prev
+        prev && prev.id === id
+          ? {
+              ...prev,
+              ...updates,
+              ...(selectedCategory
+                ? {
+                    title: selectedCategory.name,
+                    category: selectedCategory.name,
+                    categoryIconName: selectedCategory.iconName,
+                  }
+                : {}),
+            }
+          : prev
       );
     },
-    [updateTransaction]
+    [updateTransaction, categories]
+  );
+
+  const handleDeleteCategory = useCallback(
+    (categoryId: string) => {
+      const isUsedByHistory = transactions.some((transaction) => transaction.categoryId === categoryId);
+      deleteCategory(categoryId, isUsedByHistory);
+    },
+    [deleteCategory, transactions]
   );
 
   const handleDeleteTransaction = useCallback(
@@ -324,6 +347,7 @@ function App() {
         <section className="px-5">
           <TransactionList
             transactions={transactions}
+            categories={categories}
             onSelect={setSelectedTransaction}
           />
         </section>
@@ -340,12 +364,17 @@ function App() {
       <AddTransactionSheet
         open={isSheetOpen}
         onClose={() => setIsSheetOpen(false)}
+        categories={categories}
+        onAddCategory={addCategory}
+        onUpdateCategory={updateCategory}
+        onDeleteCategory={handleDeleteCategory}
         onSave={handleSaveTransaction}
       />
 
       {/* Transaction Detail / Edit / Delete Bottom Sheet */}
       <TransactionDetailSheet
         transaction={selectedTransaction}
+        categories={categories}
         onClose={() => setSelectedTransaction(null)}
         onUpdate={handleUpdateTransaction}
         onDelete={handleDeleteTransaction}
