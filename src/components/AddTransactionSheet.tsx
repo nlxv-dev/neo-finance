@@ -277,7 +277,7 @@ export function AddTransactionSheet({
                     <FolderPlus className="h-5 w-5" />
 
                     <span className="text-[11px] font-medium">
-                      Своя плашка
+                      Новая категория
                     </span>
                   </button>
                 </div>
@@ -306,7 +306,7 @@ export function AddTransactionSheet({
               </h2>
 
               <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
-                Задайте имя и выберите одну из 150+ премиальных иконок
+                Задайте имя и выберите подходящую иконку
               </p>
 
               {/* Инпут названия категории */}
@@ -388,7 +388,7 @@ export function AddTransactionSheet({
                   className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-semibold rounded-2xl bg-gradient-to-r from-mint to-indigoblue text-white active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
                 >
                   <Check className="h-4 w-4" />
-                  Создать плашку
+                  Добавить категорию
                 </button>
               </div>
             </div>
