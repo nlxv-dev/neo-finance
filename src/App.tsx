@@ -1,5 +1,16 @@
+
 import { useState, useCallback, useMemo } from 'react';
-import { Sun, Moon, TrendingUp, ArrowUpRight, ArrowDownRight, ChevronRight, Pencil } from 'lucide-react';
+import {
+  Sun,
+  Moon,
+  TrendingUp,
+  TrendingDown,
+  ArrowUpRight,
+  ArrowDownRight,
+  ChevronRight,
+  Pencil,
+  Minus,
+} from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useProfile } from '@/hooks/useProfile';
@@ -13,7 +24,20 @@ import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { BalanceAdjustSheet } from '@/components/BalanceAdjustSheet';
 import { formatCurrency, MONTHLY_BUDGET, getBudgetStatus, type Transaction } from '@/data/mockData';
 
-const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const MONTHS_RU = [
+  'Январь',
+  'Февраль',
+  'Март',
+  'Апрель',
+  'Май',
+  'Июнь',
+  'Июль',
+  'Август',
+  'Сентябрь',
+  'Октябрь',
+  'Ноябрь',
+  'Декабрь',
+];
 
 function App() {
   const { theme, toggleTheme } = useTheme();
@@ -24,19 +48,31 @@ function App() {
 
   const { userName, initialBalance, updateName, updateInitialBalance } = useProfile();
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
-  const { transactions, addTransaction, resetTransactions, updateTransaction, deleteTransaction, totalIncome, totalExpenses, totalBalance } = useTransactions(initialBalance);
+
+  const {
+    transactions,
+    addTransaction,
+    resetTransactions,
+    updateTransaction,
+    deleteTransaction,
+    totalIncome,
+    totalExpenses,
+    totalBalance,
+  } = useTransactions(initialBalance);
 
   const monthlyGrowth = totalIncome - totalExpenses;
   const safeToSpend = MONTHLY_BUDGET - totalExpenses;
   const budgetPercent = (totalExpenses / MONTHLY_BUDGET) * 100;
   const budgetStatus = getBudgetStatus(totalExpenses, MONTHLY_BUDGET);
   const isOverbudget = totalExpenses > MONTHLY_BUDGET;
+
   const progressGradient =
     budgetStatus === 'normal'
       ? 'from-mint to-indigoblue'
       : budgetStatus === 'warning'
-      ? 'from-amber-500 to-orange-400'
-      : 'from-red-500 to-red-500';
+        ? 'from-amber-500 to-orange-400'
+        : 'from-red-500 to-red-500';
+
   const progressWidth = Math.min(100, budgetPercent);
 
   const monthLabel = useMemo(() => {
@@ -84,6 +120,7 @@ function App() {
     <div className="relative min-h-screen bg-white dark:bg-amoled transition-colors duration-300">
       {/* Scrollable container */}
       <div className="relative mx-auto min-h-screen max-w-md overflow-y-auto no-scrollbar pb-32">
+
         {/* === TOP HEADER (Digital Dome) === */}
         <header className="relative overflow-hidden px-5 pt-12 pb-8">
           <ParticleBackground isDark={theme === 'dark'} />
@@ -99,10 +136,16 @@ function App() {
               <div className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm">
                 <span className="text-sm font-bold gradient-text">F</span>
               </div>
+
               <div className="text-left">
-                <p className="text-[11px] text-neutral-400 dark:text-neutral-500">Добро пожаловать</p>
+                <p className="text-[11px] text-neutral-400 dark:text-neutral-500">
+                  Добро пожаловать
+                </p>
+
                 <div className="flex items-center gap-0.5">
-                  <p className="text-sm font-semibold text-neutral-900 dark:text-white">{userName}</p>
+                  <p className="text-sm font-semibold text-neutral-900 dark:text-white">
+                    {userName}
+                  </p>
                   <ChevronRight className="h-3 w-3 text-neutral-400 dark:text-neutral-500" />
                 </div>
               </div>
@@ -128,6 +171,7 @@ function App() {
             <p className="text-xs font-medium uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
               Общий баланс
             </p>
+
             <button
               onClick={() => setIsBalanceAdjustOpen(true)}
               className="group mt-1.5 flex items-end gap-2 transition-transform active:scale-95 gpu"
@@ -135,61 +179,105 @@ function App() {
             >
               <h1 className="font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums">
                 {formatCurrency(totalBalance)}
-                <span className="ml-1.5 text-2xl text-neutral-400 dark:text-neutral-500">₽</span>
+                <span className="ml-1.5 text-2xl text-neutral-400 dark:text-neutral-500">
+                  ₽
+                </span>
               </h1>
+
               <Pencil className="mb-2 h-4 w-4 text-neutral-300 transition-colors group-hover:text-neutral-400 dark:text-neutral-600 dark:group-hover:text-neutral-400" />
             </button>
 
             {/* Monthly growth pill */}
-            <div className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-mint/10 dark:bg-mint/10 px-3 py-1.5">
-              <TrendingUp className="h-3.5 w-3.5 text-mint dark:text-mint" />
-              <span className="text-xs font-medium text-mint dark:text-mint">
-                {monthlyGrowth >= 0 ? '+' : ''}{formatCurrency(monthlyGrowth)} ₽ за месяц
+            <div
+              className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 ${
+                monthlyGrowth > 0
+                  ? 'bg-mint/10 dark:bg-mint/10'
+                  : monthlyGrowth < 0
+                    ? 'bg-red-500/10 dark:bg-red-500/10'
+                    : 'bg-neutral-100 dark:bg-neutral-800/50'
+              }`}
+            >
+              {monthlyGrowth > 0 ? (
+                <TrendingUp className="h-3.5 w-3.5 text-mint dark:text-mint" />
+              ) : monthlyGrowth < 0 ? (
+                <TrendingDown className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />
+              ) : (
+                <Minus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />
+              )}
+
+              <span
+                className={`text-xs font-medium ${
+                  monthlyGrowth > 0
+                    ? 'text-mint dark:text-mint'
+                    : monthlyGrowth < 0
+                      ? 'text-red-500 dark:text-red-400'
+                      : 'text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                {monthlyGrowth > 0 ? '+' : ''}
+                {formatCurrency(monthlyGrowth)} ₽ за месяц
               </span>
             </div>
           </div>
 
           {/* Income / Expense cards */}
-          <div className="relative z-10 mt-6 grid grid-cols-2 gap-3 animate-fade-in-up" style={{ animationDelay: '100ms' }}>
+          <div
+            className="relative z-10 mt-6 grid grid-cols-2 gap-3 animate-fade-in-up"
+            style={{ animationDelay: '100ms' }}
+          >
+            {/* Income card */}
             <div className="rounded-2xl neu-card p-4">
               <div className="flex items-center justify-between">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-mint/10 dark:bg-mint/10">
                   <ArrowUpRight className="h-4 w-4 text-mint dark:text-mint" />
                 </div>
+
                 <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   Доход
                 </span>
               </div>
+
               <p className="mt-2.5 font-light tracking-tight text-2xl text-neutral-900 dark:text-white tabular-nums">
                 {formatCurrency(totalIncome)}
-                <span className="ml-1 text-sm text-neutral-400 dark:text-neutral-500">₽</span>
+                <span className="ml-1 text-sm text-neutral-400 dark:text-neutral-500">
+                  ₽
+                </span>
               </p>
             </div>
 
+            {/* Expense card */}
             <div className="rounded-2xl neu-card p-4">
               <div className="flex items-center justify-between">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800/50">
                   <ArrowDownRight className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
                 </div>
+
                 <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   Расход
                 </span>
               </div>
+
               <p className="mt-2.5 font-light tracking-tight text-2xl text-neutral-900 dark:text-white tabular-nums">
                 {formatCurrency(totalExpenses)}
-                <span className="ml-1 text-sm text-neutral-400 dark:text-neutral-500">₽</span>
+                <span className="ml-1 text-sm text-neutral-400 dark:text-neutral-500">
+                  ₽
+                </span>
               </p>
             </div>
           </div>
         </header>
 
         {/* === MIDDLE SECTION (Semicircular Gauge) === */}
-        <section className="px-5 mt-2 animate-fade-in" style={{ animationDelay: '200ms' }}>
+        <section
+          className="mt-2 px-5 animate-fade-in"
+          style={{ animationDelay: '200ms' }}
+        >
           <div className="rounded-3xl neu-card p-6 pb-4">
             <div className="mb-1 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
                 Бюджет месяца
               </h2>
+
               <span className="rounded-full bg-neutral-100 dark:bg-neutral-800/50 px-2.5 py-0.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">
                 {monthLabel}
               </span>
@@ -211,9 +299,17 @@ function App() {
                   style={{ width: `${progressWidth}%` }}
                 />
               </div>
+
               <div className="mt-2 flex justify-between text-[10px] text-neutral-400 dark:text-neutral-500">
                 <span>{formatCurrency(totalExpenses)} ₽ потрачено</span>
-                <span className={isOverbudget ? 'text-red-500 dark:text-red-400 font-medium' : ''}>
+
+                <span
+                  className={
+                    isOverbudget
+                      ? 'text-red-500 dark:text-red-400 font-medium'
+                      : ''
+                  }
+                >
                   {isOverbudget
                     ? `-${formatCurrency(totalExpenses - MONTHLY_BUDGET)} ₽ перерасход`
                     : `${formatCurrency(Math.max(0, MONTHLY_BUDGET - totalExpenses))} ₽ осталось`}
@@ -225,12 +321,19 @@ function App() {
 
         {/* === BOTTOM SECTION (Transactions + Tab Bar) === */}
         <section className="px-5">
-          <TransactionList transactions={transactions} onSelect={setSelectedTransaction} />
+          <TransactionList
+            transactions={transactions}
+            onSelect={setSelectedTransaction}
+          />
         </section>
       </div>
 
       {/* Floating Island Tab Bar */}
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} onAddClick={() => setIsSheetOpen(true)} />
+      <TabBar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onAddClick={() => setIsSheetOpen(true)}
+      />
 
       {/* Add Transaction Bottom Sheet */}
       <AddTransactionSheet
@@ -247,7 +350,7 @@ function App() {
         onDelete={handleDeleteTransaction}
       />
 
-      {/* Balance Adjust Bottom Sheet */}
+      {/* Balance Adjust Sheet */}
       <BalanceAdjustSheet
         open={isBalanceAdjustOpen}
         onClose={() => setIsBalanceAdjustOpen(false)}
@@ -255,7 +358,7 @@ function App() {
         onAdjust={handleBalanceAdjust}
       />
 
-      {/* Profile & Settings Bottom Sheet */}
+      {/* Profile & Settings Sheet */}
       <ProfileSheet
         open={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
