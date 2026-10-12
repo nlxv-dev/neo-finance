@@ -1,37 +1,31 @@
 import { useState, useEffect } from 'react';
 import {
   X,
-  Eye,
   Pencil,
   Trash2,
   ArrowUpRight,
   ArrowDownRight,
   Check,
-  AlertTriangle,
-  Utensils,
-  Car,
-  Home,
 } from 'lucide-react';
-import { formatCurrency, getIconForCategory, type Transaction } from '@/data/mockData';
+import { formatCurrency, type Transaction } from '@/data/mockData';
+import type { CustomCategory } from '@/hooks/useCategories';
+import { IconRenderer } from '@/components/IconRenderer';
+import { DeleteConfirmationPanel } from '@/components/DeleteConfirmationPanel';
 
 type TxType = 'expense' | 'income';
-type Category = 'Еда' | 'Транспорт' | 'Аренда';
+type TransactionUpdates = { amount: number; categoryId: string; isIncome: boolean };
 
 interface TransactionDetailSheetProps {
   transaction: Transaction | null;
+  categories: CustomCategory[];
   onClose: () => void;
-  onUpdate: (id: number, updates: { amount: number; category: string; isIncome: boolean }) => void;
+  onUpdate: (id: number, updates: TransactionUpdates) => void;
   onDelete: (id: number) => void;
 }
 
-const editCategories: { label: Category; icon: typeof Utensils }[] = [
-  { label: 'Еда', icon: Utensils },
-  { label: 'Транспорт', icon: Car },
-  { label: 'Аренда', icon: Home },
-];
-
 export function TransactionDetailSheet({
   transaction,
+  categories,
   onClose,
   onUpdate,
   onDelete,
@@ -39,39 +33,77 @@ export function TransactionDetailSheet({
   const open = transaction !== null;
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view');
   const [editAmount, setEditAmount] = useState('');
-  const [editCategory, setEditCategory] = useState<Category>('Еда');
+  const [editCategoryId, setEditCategoryId] = useState('');
   const [editType, setEditType] = useState<TxType>('expense');
 
   useEffect(() => {
-    if (transaction) {
-      setMode('view');
-      setEditAmount(String(transaction.amount));
-      setEditCategory(
-        (['Еда', 'Транспорт', 'Аренда'] as Category[]).includes(transaction.category as Category)
-          ? (transaction.category as Category)
-          : 'Еда'
-      );
-      setEditType(transaction.isIncome ? 'income' : 'expense');
-    }
+    if (!transaction) return;
+    setMode('view');
+    setEditAmount(String(transaction.amount));
+    setEditCategoryId(transaction.categoryId ?? '');
+    setEditType(transaction.isIncome ? 'income' : 'expense');
   }, [transaction]);
 
   useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = ''; };
-    }
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
   }, [open]);
 
   if (!transaction) return null;
 
-  const Icon = getIconForCategory(transaction.category);
+  const currentCategory = categories.find((category) => category.id === transaction.categoryId);
+  const categoryName = currentCategory?.name ?? transaction.category;
+  const categoryIconName = currentCategory?.iconName ?? transaction.categoryIconName ?? 'HelpCircle';
+  const editCategories = categories.filter(
+    (category) =>
+      category.isIncome === (editType === 'income') &&
+      (!category.isArchived || category.id === transaction.categoryId)
+  );
+
+  const startEditing = () => {
+    const transactionType: TxType = transaction.isIncome ? 'income' : 'expense';
+    const current = categories.find((category) => category.id === transaction.categoryId);
+    const fallback = categories.find(
+      (category) => !category.isArchived && category.isIncome === transaction.isIncome
+    );
+    setEditAmount(String(transaction.amount));
+    setEditType(transactionType);
+    setEditCategoryId(current && current.isIncome === transaction.isIncome
+      ? current.id
+      : fallback?.id ?? '');
+    setMode('edit');
+  };
+
+  const handleEditTypeChange = (nextType: TxType) => {
+    setEditType(nextType);
+    const isIncome = nextType === 'income';
+    const selectable = categories.filter(
+      (category) =>
+        category.isIncome === isIncome &&
+        (!category.isArchived || category.id === transaction.categoryId)
+    );
+    setEditCategoryId((currentId) =>
+      selectable.some((category) => category.id === currentId)
+        ? currentId
+        : (selectable[0]?.id ?? '')
+    );
+  };
 
   const handleSaveEdit = () => {
     const parsed = parseInt(editAmount.replace(/\D/g, ''), 10);
     if (!parsed || parsed <= 0) return;
+
+    const selectedCategory = categories.find((category) => category.id === editCategoryId);
+    if (!selectedCategory || selectedCategory.isIncome !== (editType === 'income')) return;
+    if (selectedCategory.isArchived && selectedCategory.id !== transaction.categoryId) return;
+
     onUpdate(transaction.id, {
       amount: parsed,
-      category: editCategory,
+      categoryId: selectedCategory.id,
       isIncome: editType === 'income',
     });
     setMode('view');
@@ -84,7 +116,6 @@ export function TransactionDetailSheet({
 
   return (
     <>
-      {/* Backdrop */}
       <div
         className={`fixed inset-0 z-[60] transition-opacity duration-300 gpu ${
           open ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -97,7 +128,6 @@ export function TransactionDetailSheet({
         onClick={onClose}
       />
 
-      {/* Bottom Sheet */}
       <div
         className={`fixed bottom-0 left-0 right-0 z-[70] mx-auto max-w-md rounded-t-3xl sheet-glass transition-all duration-300 ease-out gpu ${
           open
@@ -106,12 +136,10 @@ export function TransactionDetailSheet({
         }`}
         style={{ height: '60vh' }}
       >
-        {/* Drag handle */}
         <div className="flex justify-center pt-3 pb-2">
           <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-600" />
         </div>
 
-        {/* Close button */}
         <button
           onClick={onClose}
           className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full neu-inset transition-transform active:scale-90 gpu"
@@ -120,12 +148,13 @@ export function TransactionDetailSheet({
           <X className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
         </button>
 
-        <div className="flex h-full flex-col px-6 pb-8">
+        <div className="flex h-full flex-col px-6 pb-8 overflow-hidden">
           {mode === 'view' && (
             <ViewMode
               transaction={transaction}
-              Icon={Icon}
-              onEdit={() => setMode('edit')}
+              categoryName={categoryName}
+              categoryIconName={categoryIconName}
+              onEdit={startEditing}
               onDelete={() => setMode('delete')}
             />
           )}
@@ -134,10 +163,11 @@ export function TransactionDetailSheet({
             <EditMode
               editAmount={editAmount}
               setEditAmount={setEditAmount}
-              editCategory={editCategory}
-              setEditCategory={setEditCategory}
+              editCategoryId={editCategoryId}
+              setEditCategoryId={setEditCategoryId}
+              editCategories={editCategories}
               editType={editType}
-              setEditType={setEditType}
+              onTypeChange={handleEditTypeChange}
               onSave={handleSaveEdit}
               onCancel={() => setMode('view')}
             />
@@ -146,6 +176,7 @@ export function TransactionDetailSheet({
           {mode === 'delete' && (
             <DeleteMode
               transaction={transaction}
+              categoryName={categoryName}
               onConfirm={handleDelete}
               onCancel={() => setMode('view')}
             />
@@ -158,23 +189,23 @@ export function TransactionDetailSheet({
 
 function ViewMode({
   transaction,
-  Icon,
+  categoryName,
+  categoryIconName,
   onEdit,
   onDelete,
 }: {
   transaction: Transaction;
-  Icon: typeof Eye;
+  categoryName: string;
+  categoryIconName: string;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   return (
     <>
-      {/* Title */}
       <h2 className="mt-2 text-lg font-semibold text-neutral-900 dark:text-white">
         Детали транзакции
       </h2>
 
-      {/* Transaction icon + amount */}
       <div className="mt-5 flex flex-col items-center">
         <div
           className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
@@ -183,11 +214,11 @@ function ViewMode({
               : 'bg-neutral-100 dark:bg-neutral-800/50'
           }`}
         >
-          <Icon
+          <IconRenderer
+            name={categoryIconName}
             className={`h-7 w-7 ${
               transaction.isIncome ? 'text-mint dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
             }`}
-            strokeWidth={2}
           />
         </div>
         <p className="mt-3 text-3xl font-light tracking-tight text-neutral-900 dark:text-white tabular-nums">
@@ -208,17 +239,14 @@ function ViewMode({
         </span>
       </div>
 
-      {/* Details grid */}
       <div className="mt-5 space-y-2.5">
-        <DetailRow label="Категория" value={transaction.category} />
+        <DetailRow label="Категория" value={categoryName} />
         <DetailRow label="Дата" value={transaction.date} />
         <DetailRow label="ID" value={`#${transaction.id}`} />
       </div>
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Action buttons */}
       <div className="flex gap-2.5">
         <button
           onClick={onEdit}
@@ -254,22 +282,27 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 function EditMode({
   editAmount,
   setEditAmount,
-  editCategory,
-  setEditCategory,
+  editCategoryId,
+  setEditCategoryId,
+  editCategories,
   editType,
-  setEditType,
+  onTypeChange,
   onSave,
   onCancel,
 }: {
   editAmount: string;
-  setEditAmount: (v: string) => void;
-  editCategory: Category;
-  setEditCategory: (c: Category) => void;
+  setEditAmount: (value: string) => void;
+  editCategoryId: string;
+  setEditCategoryId: (categoryId: string) => void;
+  editCategories: CustomCategory[];
   editType: TxType;
-  setEditType: (t: TxType) => void;
+  onTypeChange: (type: TxType) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const parsedAmount = parseInt(editAmount.replace(/\D/g, ''), 10);
+  const hasSelection = editCategories.some((category) => category.id === editCategoryId);
+
   return (
     <>
       <h2 className="mt-2 text-lg font-semibold text-neutral-900 dark:text-white">
@@ -279,41 +312,36 @@ function EditMode({
         Измените тип, сумму и категорию
       </p>
 
-      {/* Type toggle */}
       <div className="mt-4 flex gap-2">
-        {(['expense', 'income'] as const).map((t) => (
+        {(['expense', 'income'] as const).map((type) => (
           <button
-            key={t}
-            onClick={() => setEditType(t)}
+            key={type}
+            onClick={() => onTypeChange(type)}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-medium transition-all duration-200 active:scale-95 gpu ${
-              editType === t
-                ? t === 'income'
+              editType === type
+                ? type === 'income'
                   ? 'bg-mint/15 text-mint dark:bg-mint/15 dark:text-mint'
                   : 'bg-neutral-900 text-white dark:bg-white dark:text-black'
                 : 'neu-inset text-neutral-400 dark:text-neutral-500'
             }`}
           >
-            {t === 'income' ? (
+            {type === 'income' ? (
               <ArrowUpRight className="h-3.5 w-3.5" />
             ) : (
               <ArrowDownRight className="h-3.5 w-3.5" />
             )}
-            {t === 'income' ? 'Доход' : 'Расход'}
+            {type === 'income' ? 'Доход' : 'Расход'}
           </button>
         ))}
       </div>
 
-      {/* Amount input */}
       <div className="mt-5 flex flex-col items-center">
         <div className="flex items-baseline justify-center">
           <input
             type="text"
             inputMode="numeric"
             value={editAmount ? formatCurrency(parseInt(editAmount.replace(/\D/g, ''), 10)) : ''}
-            onChange={(e) => {
-              const digits = e.target.value.replace(/\D/g, '');
-              setEditAmount(digits.slice(0, 9));
-            }}
+            onChange={(event) => setEditAmount(event.target.value.replace(/\D/g, '').slice(0, 9))}
             placeholder="0"
             className="w-full bg-transparent text-center font-light tracking-tight text-4xl text-neutral-900 dark:text-white tabular-nums outline-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700"
           />
@@ -321,48 +349,47 @@ function EditMode({
         </div>
       </div>
 
-      {/* Category pills */}
-      <div className="mt-5">
+      <div className="mt-5 min-h-0">
         <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
           Категория
         </p>
-        <div className="flex gap-2.5">
-          {editCategories.map((cat) => {
-            const Icon = cat.icon;
-            const active = editCategory === cat.label;
-            return (
-              <button
-                key={cat.label}
-                onClick={() => setEditCategory(cat.label)}
-                className={`flex flex-1 flex-col items-center gap-1.5 rounded-2xl py-3 transition-all duration-200 active:scale-95 gpu ${
-                  active ? 'neu-card-sm ring-1 ring-mint/40 dark:ring-mint/30' : 'neu-inset'
-                }`}
-              >
-                <Icon
-                  className={`h-5 w-5 ${
-                    active ? 'text-mint dark:text-mint' : 'text-neutral-400 dark:text-neutral-500'
-                  }`}
-                  strokeWidth={2}
-                />
-                <span
-                  className={`text-[11px] font-medium ${
-                    active
-                      ? 'text-neutral-900 dark:text-white'
-                      : 'text-neutral-400 dark:text-neutral-500'
+        {editCategories.length === 0 ? (
+          <p className="rounded-xl neu-inset p-3 text-xs text-neutral-400 dark:text-neutral-500">
+            Для этого типа пока нет доступных категорий. Добавьте категорию через форму новой транзакции.
+          </p>
+        ) : (
+          <div className="grid max-h-[150px] grid-cols-3 gap-2 overflow-y-auto no-scrollbar p-1">
+            {editCategories.map((category) => {
+              const active = editCategoryId === category.id;
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => setEditCategoryId(category.id)}
+                  className={`flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-1 py-3 transition-all duration-200 active:scale-95 gpu ${
+                    active ? 'neu-card-sm ring-1 ring-mint/40 dark:ring-mint/30' : 'neu-inset'
                   }`}
                 >
-                  {cat.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                  <IconRenderer
+                    name={category.iconName}
+                    className={`h-5 w-5 ${
+                      active ? 'text-mint dark:text-mint' : 'text-neutral-400 dark:text-neutral-500'
+                    }`}
+                  />
+                  <span className={`max-w-full truncate text-[11px] font-medium ${
+                    active ? 'text-neutral-900 dark:text-white' : 'text-neutral-400 dark:text-neutral-500'
+                  }`}>
+                    {category.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="flex-1" />
 
-      {/* Save / Cancel */}
-      <div className="flex gap-2.5">
+      <div className="flex gap-2.5 pt-3">
         <button
           onClick={onCancel}
           className="flex-1 rounded-2xl py-3.5 text-sm font-medium text-neutral-500 dark:text-neutral-400 neu-card-sm transition-all duration-200 active:scale-[0.98] gpu"
@@ -371,7 +398,7 @@ function EditMode({
         </button>
         <button
           onClick={onSave}
-          disabled={!editAmount || parseInt(editAmount, 10) <= 0}
+          disabled={!parsedAmount || parsedAmount <= 0 || !hasSelection}
           className="flex flex-[2] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40 disabled:active:scale-100"
         >
           <Check className="h-4 w-4" strokeWidth={2.5} />
@@ -384,46 +411,21 @@ function EditMode({
 
 function DeleteMode({
   transaction,
+  categoryName,
   onConfirm,
   onCancel,
 }: {
   transaction: Transaction;
+  categoryName: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   return (
-    <>
-      <div className="flex flex-1 flex-col items-center justify-center">
-        <div
-          className="flex h-16 w-16 items-center justify-center rounded-2xl"
-          style={{ background: 'rgba(239, 68, 68, 0.1)' }}
-        >
-          <AlertTriangle className="h-8 w-8 text-red-500 dark:text-red-400" />
-        </div>
-        <h2 className="mt-4 text-lg font-semibold text-neutral-900 dark:text-white">
-          Удалить транзакцию?
-        </h2>
-        <p className="mt-1.5 text-center text-sm text-neutral-400 dark:text-neutral-500">
-          «{transaction.category}» на {formatCurrency(transaction.amount)} ₽ будет удалена без возможности восстановления.
-        </p>
-      </div>
-
-      <div className="flex gap-2.5">
-        <button
-          onClick={onCancel}
-          className="flex-1 rounded-2xl py-3.5 text-sm font-medium text-neutral-500 dark:text-neutral-400 neu-card-sm transition-all duration-200 active:scale-[0.98] gpu"
-        >
-          Отмена
-        </button>
-        <button
-          onClick={onConfirm}
-          className="flex flex-[2] items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu"
-          style={{ background: 'rgb(239 68 68)' }}
-        >
-          <Trash2 className="h-4 w-4" />
-          Удалить
-        </button>
-      </div>
-    </>
+    <DeleteConfirmationPanel
+      title="Удалить транзакцию?"
+      description={`«${categoryName}» на ${formatCurrency(transaction.amount)} ₽ будет удалена без возможности восстановления.`}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }

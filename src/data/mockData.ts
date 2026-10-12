@@ -19,7 +19,12 @@ import {
 export interface Transaction {
   id: number;
   title: string;
+  /** Stable category reference. Null is used only for legacy rows that cannot be mapped safely. */
+  categoryId: string | null;
+  /** Name snapshot used for legacy/orphaned rows and as a safe display fallback. */
   category: string;
+  /** Icon snapshot used when a legacy row cannot be linked to a category. */
+  categoryIconName: string;
   amount: number;
   date: string;
   isIncome: boolean;
