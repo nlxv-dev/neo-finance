@@ -10,8 +10,9 @@ import {
 } from 'lucide-react';
 
 import { formatCurrency } from '@/data/mockData';
-import { useCategories } from '@/hooks/useCategories';
+import type { CustomCategory } from '@/hooks/useCategories';
 import { IconRenderer } from '@/components/IconRenderer';
+import { DeleteConfirmationPanel } from '@/components/DeleteConfirmationPanel';
 import { ICON_GROUPS } from '@/data/iconsConfig';
 
 const ICON_GROUP_NAMES = Object.keys(ICON_GROUPS);
@@ -32,9 +33,13 @@ type TxType = 'expense' | 'income';
 interface AddTransactionSheetProps {
   open: boolean;
   onClose: () => void;
+  categories: CustomCategory[];
+  onAddCategory: (name: string, iconName: string, isIncome: boolean) => void;
+  onUpdateCategory: (id: string, name: string, iconName: string) => void;
+  onDeleteCategory: (id: string) => void;
   onSave: (data: {
     amount: number;
-    category: string;
+    categoryId: string;
     isIncome: boolean;
   }) => void;
 }
@@ -42,6 +47,10 @@ interface AddTransactionSheetProps {
 export function AddTransactionSheet({
   open,
   onClose,
+  categories,
+  onAddCategory,
+  onUpdateCategory,
+  onDeleteCategory,
   onSave,
 }: AddTransactionSheetProps) {
   const [txType, setTxType] = useState<TxType>('expense');
@@ -57,13 +66,13 @@ export function AddTransactionSheet({
   const [selectedIconName, setSelectedIconName] = useState('Wallet');
   const [activeIconGroup, setActiveIconGroup] = useState<string>(DEFAULT_ICON_GROUP);
   const [showIconSelector, setShowIconSelector] = useState(false); // Прогрессивное раскрытие сетки иконок
+  const [categoryError, setCategoryError] = useState('');
+  const [categoryToDeleteId, setCategoryToDeleteId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const { categories, addCategory, updateCategory, deleteCategory } =
-    useCategories();
 
   const filteredCategories = categories.filter(
-    (cat) => cat.isIncome === (txType === 'income')
+    (cat) => !cat.isArchived && cat.isIncome === (txType === 'income')
   );
 
   useEffect(() => {
@@ -93,6 +102,8 @@ export function AddTransactionSheet({
     setNewCategoryName('');
     setSelectedIconName('Wallet');
     setShowIconSelector(false);
+    setCategoryError('');
+    setCategoryToDeleteId(null);
   }, [open]);
 
   // Блокируем прокрутку страницы под открытой нижней панелью.
@@ -116,27 +127,45 @@ export function AddTransactionSheet({
     if (!currentCategory) return;
     onSave({
       amount: parsed,
-      category: currentCategory.name,
+      categoryId: currentCategory.id,
       isIncome: txType === 'income',
     });
     onClose();
   };
 
   const handleCreateOrUpdateCategory = () => {
-    if (!newCategoryName.trim()) return;
-    if (editingCategoryId) {
-      updateCategory(
-        editingCategoryId,
-        newCategoryName.trim(),
-        selectedIconName
-      );
-    } else {
-      addCategory(
-        newCategoryName.trim(),
-        selectedIconName,
-        txType === 'income'
-      );
+    const trimmedName = newCategoryName.trim();
+    if (!trimmedName) return;
+
+    const categoryBeingEdited = editingCategoryId
+      ? categories.find((category) => category.id === editingCategoryId)
+      : undefined;
+    const isIncome = categoryBeingEdited?.isIncome ?? (txType === 'income');
+    const normalizedName = trimmedName.toLocaleLowerCase('ru-RU');
+    const currentNormalizedName = categoryBeingEdited?.name.trim().toLocaleLowerCase('ru-RU');
+    const isKeepingExistingName = Boolean(
+      categoryBeingEdited && currentNormalizedName === normalizedName
+    );
+    const duplicate = !isKeepingExistingName && categories.some(
+      (category) =>
+        category.id !== editingCategoryId &&
+        !category.isArchived &&
+        category.isIncome === isIncome &&
+        category.name.trim().toLocaleLowerCase('ru-RU') === normalizedName
+    );
+
+    if (duplicate) {
+      setCategoryError('Категория с таким названием уже существует.');
+      return;
     }
+
+    setCategoryError('');
+    if (editingCategoryId) {
+      onUpdateCategory(editingCategoryId, trimmedName, selectedIconName);
+    } else {
+      onAddCategory(trimmedName, selectedIconName, isIncome);
+    }
+
     setNewCategoryName('');
     setSelectedIconName('Wallet');
     setIsCreatingCategory(false);
@@ -154,14 +183,20 @@ export function AddTransactionSheet({
   };
 
   const handleDeleteCategory = (id: string) => {
-    if (confirm('Вы уверены, что хотите удалить эту категорию?')) {
-      deleteCategory(id);
-      setIsCreatingCategory(false);
-      setEditingCategoryId(null);
-      setNewCategoryName('');
-      setSelectedIconName('Wallet');
-      setShowIconSelector(false);
-    }
+    setCategoryToDeleteId(id);
+  };
+
+  const confirmDeleteCategory = () => {
+    if (!categoryToDeleteId) return;
+
+    onDeleteCategory(categoryToDeleteId);
+    setCategoryToDeleteId(null);
+    setIsCreatingCategory(false);
+    setEditingCategoryId(null);
+    setNewCategoryName('');
+    setSelectedIconName('Wallet');
+    setShowIconSelector(false);
+    setCategoryError('');
   };
 
   const startEditing = (
@@ -172,6 +207,7 @@ export function AddTransactionSheet({
     setEditingCategoryId(catId);
     setNewCategoryName(catName);
     setSelectedIconName(catIcon);
+    setCategoryError('');
     setShowIconSelector(false);
     setIsCreatingCategory(true);
   };
@@ -180,9 +216,14 @@ export function AddTransactionSheet({
     setEditingCategoryId(null);
     setNewCategoryName('');
     setSelectedIconName('Wallet');
+    setCategoryError('');
     setShowIconSelector(false);
     setIsCreatingCategory(true);
   };
+
+  const categoryPendingDeletion = categoryToDeleteId
+    ? categories.find((category) => category.id === categoryToDeleteId) ?? null
+    : null;
 
   return (
     <>
@@ -219,7 +260,14 @@ export function AddTransactionSheet({
         </button>
 
         <div className="flex h-full flex-col px-6 pb-8 overflow-hidden">
-          {!isCreatingCategory ? (
+          {categoryPendingDeletion ? (
+            <DeleteConfirmationPanel
+              title="Удалить категорию?"
+              description={`«${categoryPendingDeletion.name}» исчезнет из выбора для новых транзакций. Записи в истории сохранятся.`}
+              onConfirm={confirmDeleteCategory}
+              onCancel={() => setCategoryToDeleteId(null)}
+            />
+          ) : !isCreatingCategory ? (
             /* РЕЖИМ 1: ДОБАВЛЕНИЕ ТРАНЗАКЦИИ */
             <div className="flex flex-col h-full overflow-y-auto no-scrollbar p-1">
               <h2 className="mt-2 text-lg font-semibold text-neutral-900 dark:text-white">
@@ -395,11 +443,16 @@ export function AddTransactionSheet({
                     type="text"
                     maxLength={15}
                     value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    onChange={(e) => { setNewCategoryName(e.target.value); setCategoryError(''); }}
                     placeholder="Название (например, Налоги)"
                     className="min-w-0 flex-1 bg-transparent text-sm font-medium text-neutral-900 dark:text-white outline-none placeholder:text-neutral-400 dark:placeholder:text-neutral-600"
                   />
                 </div>
+                {categoryError && (
+                  <p className="mt-2 text-xs font-medium text-red-500" role="alert">
+                    {categoryError}
+                  </p>
+                )}
               </div>
 
               {/* Аккордеон: плавно раскрывается и сворачивается */}
@@ -474,6 +527,7 @@ export function AddTransactionSheet({
                       setNewCategoryName('');
                       setSelectedIconName('Wallet');
                       setShowIconSelector(false);
+                      setCategoryError('');
                     }}
                     className="flex-1 py-3 text-sm font-semibold rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 active:scale-95 transition-transform"
                   >
