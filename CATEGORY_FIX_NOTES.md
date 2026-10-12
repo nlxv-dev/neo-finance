@@ -13,3 +13,11 @@
 The first load normalizes older transaction records. A legacy record is linked automatically only when its category name and transaction type match exactly one active category. If duplicate categories make the match ambiguous, the record is deliberately kept unlinked (`categoryId: null`) rather than being attached to the wrong category. Its saved name remains visible and a fallback icon is shown. Open that transaction, choose the right category, and save it to link it explicitly.
 
 No localStorage keys were intentionally changed.
+
+## Confirmation dialog consistency
+
+- Replaced the browser-native `confirm()` used for category deletion with an in-app confirmation panel.
+- Extracted the destructive confirmation UI into `src/components/DeleteConfirmationPanel.tsx`.
+- Reused the same panel for deleting categories and transactions, so both actions follow the same dark-theme styling.
+- Cancelling category deletion returns to category editing without discarding the current edits.
+- Scanned TypeScript/JavaScript source files: no remaining `confirm(...)` calls were found.
