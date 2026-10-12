@@ -7,7 +7,6 @@ export interface CustomCategory {
   isIncome: boolean;
 }
 
-// Начальные дефолтные категории (база)
 const DEFAULT_CATEGORIES: CustomCategory[] = [
   { id: 'def-1', name: 'Продукты', iconName: 'ShoppingCart', isIncome: false },
   { id: 'def-2', name: 'Кафе', iconName: 'Pizza', isIncome: false },
@@ -36,15 +35,21 @@ export function useCategories() {
     setCategories((prev) => [...prev, newCategory]);
   }, []);
 
+  // НОВАЯ ФУНКЦИЯ: Редактирование существующей категории
+  const updateCategory = useCallback((id: string, name: string, iconName: string) => {
+    setCategories((prev) =>
+      prev.map((cat) => (cat.id === id ? { ...cat, name: name.trim(), iconName } : cat))
+    );
+  }, []);
+
   const deleteCategory = useCallback((id: string) => {
-    // Не даем удалить дефолтные базовые категории, чтобы приложение не упало
-    if (id.startsWith('def-')) return;
     setCategories((prev) => prev.filter(cat => cat.id !== id));
   }, []);
 
   return {
     categories,
     addCategory,
+    updateCategory, // Отдаем её в интерфейс
     deleteCategory
   };
 }
