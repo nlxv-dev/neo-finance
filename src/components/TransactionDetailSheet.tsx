@@ -342,8 +342,7 @@ function EditMode({
             inputMode="numeric"
             value={editAmount ? formatCurrency(parseInt(editAmount.replace(/\D/g, ''), 10)) : ''}
             onChange={(event) => setEditAmount(event.target.value.replace(/\D/g, '').slice(0, 9))}
-            placeholder="0"
-            className="w-full bg-transparent text-center font-light tracking-tight text-4xl text-neutral-900 dark:text-white tabular-nums outline-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700"
+            className="w-full bg-transparent text-center font-light tracking-tight text-4xl text-neutral-900 dark:text-white tabular-nums outline-none"
           />
           <span className="ml-1 text-xl font-light text-neutral-400 dark:text-neutral-500">₽</span>
         </div>
