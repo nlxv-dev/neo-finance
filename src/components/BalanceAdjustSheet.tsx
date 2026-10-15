@@ -23,7 +23,9 @@ export function BalanceAdjustSheet({
     if (open) {
       setIsNegative(currentBalance < 0);
       setDigits(String(Math.abs(currentBalance)));
+
       const timer = setTimeout(() => inputRef.current?.focus(), 350);
+
       return () => clearTimeout(timer);
     }
   }, [open, currentBalance]);
@@ -31,7 +33,10 @@ export function BalanceAdjustSheet({
   useEffect(() => {
     if (open) {
       document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = ''; };
+
+      return () => {
+        document.body.style.overflow = '';
+      };
     }
   }, [open]);
 
@@ -44,6 +49,7 @@ export function BalanceAdjustSheet({
       onClose();
       return;
     }
+
     onAdjust(targetAmount);
     onClose();
   };
@@ -91,6 +97,7 @@ export function BalanceAdjustSheet({
           <h2 className="mt-2 text-lg font-semibold text-neutral-900 dark:text-white">
             Корректировка баланса
           </h2>
+
           <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
             Введите новое значение общего баланса
           </p>
@@ -101,23 +108,32 @@ export function BalanceAdjustSheet({
               <Wallet className="h-3 w-3" />
               Новый баланс
             </div>
+
             <div className="flex items-baseline justify-center">
               {isNegative && (
-                <span className="text-4xl font-light text-red-500 dark:text-red-400">-</span>
+                <span className="text-4xl font-light text-red-500 dark:text-red-400">
+                  -
+                </span>
               )}
+
               <input
                 ref={inputRef}
                 type="text"
                 inputMode="numeric"
                 value={digits ? formatCurrency(parseInt(digits, 10)) : ''}
                 onChange={(e) => {
-                  const cleaned = e.target.value.replace(/\D/g, '').slice(0, 9);
+                  const cleaned = e.target.value
+                    .replace(/\D/g, '')
+                    .slice(0, 9);
+
                   setDigits(cleaned);
                 }}
-                placeholder="0"
-                className="w-full bg-transparent text-center font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums outline-none placeholder:text-neutral-300 dark:placeholder:text-neutral-700"
+                className="w-full bg-transparent text-center font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums outline-none"
               />
-              <span className="ml-1 text-2xl font-light text-neutral-400 dark:text-neutral-500">₽</span>
+
+              <span className="ml-1 text-2xl font-light text-neutral-400 dark:text-neutral-500">
+                ₽
+              </span>
             </div>
 
             {/* Sign toggle */}
@@ -130,15 +146,21 @@ export function BalanceAdjustSheet({
               }`}
             >
               <Minus className="h-3 w-3" />
-              {isNegative ? 'Отрицательный' : 'Сделать отрицательным'}
+
+              {isNegative
+                ? 'Отрицательный'
+                : 'Сделать отрицательным'}
             </button>
           </div>
 
           {/* Difference indicator */}
           <div className="mt-4 flex flex-col items-center">
             <div className="flex items-center gap-1.5 text-xs text-neutral-400 dark:text-neutral-500">
-              <span>Текущий: {formatCurrency(currentBalance)} ₽</span>
+              <span>
+                Текущий: {formatCurrency(currentBalance)} ₽
+              </span>
             </div>
+
             {difference !== 0 && (
               <div
                 className={`mt-2.5 inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-medium ${
@@ -152,8 +174,13 @@ export function BalanceAdjustSheet({
                 ) : (
                   <ArrowDownRight className="h-3.5 w-3.5" />
                 )}
-                {difference > 0 ? '+' : ''}{formatCurrency(difference)} ₽
-                <span className="opacity-60">· Корректировка</span>
+
+                {difference > 0 ? '+' : ''}
+                {formatCurrency(difference)} ₽
+
+                <span className="opacity-60">
+                  · Корректировка
+                </span>
               </div>
             )}
           </div>
@@ -168,7 +195,10 @@ export function BalanceAdjustSheet({
             className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40 disabled:active:scale-100"
           >
             <Check className="h-4 w-4" strokeWidth={2.5} />
-            {difference === 0 ? 'Нет изменений' : 'Применить'}
+
+            {difference === 0
+              ? 'Нет изменений'
+              : 'Применить'}
           </button>
         </div>
       </div>

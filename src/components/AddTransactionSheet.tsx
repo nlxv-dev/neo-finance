@@ -318,8 +318,7 @@ export function AddTransactionSheet({
                         e.target.value.replace(/\D/g, '').slice(0, 9)
                       )
                     }
-                    placeholder="0"
-                    className="w-full bg-transparent text-center font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums outline-none placeholder:text-neutral-300"
+                    className="w-full bg-transparent text-center font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums outline-none"
                   />
                   <span className="ml-1 text-2xl font-light text-neutral-400 dark:text-neutral-500">
                     ₽
