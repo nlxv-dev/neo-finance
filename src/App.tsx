@@ -9,7 +9,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ChevronRight,
-  Pencil,
   Minus,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -24,7 +23,8 @@ import { AddTransactionSheet } from '@/components/AddTransactionSheet';
 import { ProfileSheet } from '@/components/ProfileSheet';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { BalanceAdjustSheet } from '@/components/BalanceAdjustSheet';
-import { formatCurrency, MONTHLY_BUDGET, getBudgetStatus, type Transaction } from '@/data/mockData';
+import { BudgetEditSheet } from '@/components/BudgetEditSheet';
+import { formatCurrency, getBudgetStatus, type Transaction } from '@/data/mockData';
 
 const MONTHS_RU = [
   'Январь',
@@ -47,8 +47,16 @@ function App() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isBalanceAdjustOpen, setIsBalanceAdjustOpen] = useState(false);
+  const [isBudgetEditOpen, setIsBudgetEditOpen] = useState(false);
 
-  const { userName, initialBalance, updateName, updateInitialBalance } = useProfile();
+  const {
+    userName,
+    initialBalance,
+    updateName,
+    updateInitialBalance,
+    monthlyBudget,
+    updateMonthlyBudget,
+  } = useProfile();
   const { categories, addCategory, updateCategory, deleteCategory } = useCategories();
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
@@ -64,10 +72,10 @@ function App() {
   } = useTransactions(initialBalance, categories);
 
   const monthlyGrowth = totalIncome - totalExpenses;
-  const safeToSpend = MONTHLY_BUDGET - totalExpenses;
-  const budgetPercent = (totalExpenses / MONTHLY_BUDGET) * 100;
-  const budgetStatus = getBudgetStatus(totalExpenses, MONTHLY_BUDGET);
-  const isOverbudget = totalExpenses > MONTHLY_BUDGET;
+  const safeToSpend = monthlyBudget - totalExpenses;
+  const budgetPercent = (totalExpenses / monthlyBudget) * 100;
+  const budgetStatus = getBudgetStatus(totalExpenses, monthlyBudget);
+  const isOverbudget = totalExpenses > monthlyBudget;
 
   const progressGradient =
     budgetStatus === 'normal'
@@ -196,20 +204,21 @@ function App() {
               Общий баланс
             </p>
 
-            <button
-              onClick={() => setIsBalanceAdjustOpen(true)}
-              className="group mt-1.5 flex items-end gap-2 transition-transform active:scale-95 gpu"
-              aria-label="Корректировка баланса"
-            >
-              <h1 className="font-light tracking-tight text-5xl text-neutral-900 dark:text-white flex items-end">
-                <AnimatedCounter value={totalBalance} />
-               <span className="ml-1.5 text-2xl text-neutral-400 dark:text-neutral-500 pb-1">
-                  ₽
+            <h1 className="mt-1.5 font-light tracking-tight text-5xl text-neutral-900 dark:text-white">
+              <button
+                type="button"
+                onClick={() => setIsBalanceAdjustOpen(true)}
+                className="inline-flex items-end rounded-lg transition-opacity hover:opacity-80 active:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/60 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
+                aria-label={`Изменить общий баланс: ${formatCurrency(totalBalance)} рублей`}
+              >
+                <span className="inline-flex items-end">
+                  <AnimatedCounter value={totalBalance} />
+                  <span className="ml-1.5 pb-1 text-2xl text-neutral-400 dark:text-neutral-500">
+                    ₽
+                  </span>
                 </span>
-              </h1>
-
-              <Pencil className="mb-2 h-4 w-4 text-neutral-300 transition-colors group-hover:text-neutral-400 dark:text-neutral-600 dark:group-hover:text-neutral-400" />
-            </button>
+              </button>
+            </h1>
 
             {/* Monthly growth pill */}
             <div
@@ -310,8 +319,9 @@ function App() {
             <div className="flex justify-center">
               <SemiGauge
                 spent={totalExpenses}
-                budget={MONTHLY_BUDGET}
+                budget={monthlyBudget}
                 safeToSpend={safeToSpend}
+                onEditBudget={() => setIsBudgetEditOpen(true)}
               />
             </div>
 
@@ -335,10 +345,11 @@ function App() {
                   }
                 >
                   {isOverbudget
-                    ? `-${formatCurrency(totalExpenses - MONTHLY_BUDGET)} ₽ перерасход`
-                    : `${formatCurrency(Math.max(0, MONTHLY_BUDGET - totalExpenses))} ₽ осталось`}
+                    ? `-${formatCurrency(totalExpenses - monthlyBudget)} ₽ перерасход`
+                    : `${formatCurrency(Math.max(0, monthlyBudget - totalExpenses))} ₽ осталось`}
                 </span>
               </div>
+
             </div>
           </div>
         </section>
@@ -386,6 +397,14 @@ function App() {
         onClose={() => setIsBalanceAdjustOpen(false)}
         currentBalance={totalBalance}
         onAdjust={handleBalanceAdjust}
+      />
+
+      {/* Monthly Budget Edit Sheet */}
+      <BudgetEditSheet
+        open={isBudgetEditOpen}
+        onClose={() => setIsBudgetEditOpen(false)}
+        currentBudget={monthlyBudget}
+        onSave={updateMonthlyBudget}
       />
 
       {/* Profile & Settings Sheet */}
