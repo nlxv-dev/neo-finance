@@ -27,6 +27,8 @@ export interface Transaction {
   categoryIconName: string;
   amount: number;
   date: string;
+  /** Machine-readable transaction date used by analytics and data migration. */
+  dateISO?: string;
   isIncome: boolean;
 }
 
