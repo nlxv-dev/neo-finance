@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { type Transaction, initialTransactions } from '@/data/mockData';
 import type { CustomCategory } from '@/hooks/useCategories';
+import { resolveTransactionDateISO, toLocalISODate } from '@/data/transactionDates';
 
 const STORAGE_KEY = 'fintrack-transactions';
 
@@ -67,6 +68,11 @@ function normalizeStoredTransactions(value: unknown, categories: CustomCategory[
         categoryIconName: iconName,
         amount: item.amount as number,
         date: item.date as string,
+        dateISO: resolveTransactionDateISO({
+          id: item.id as number,
+          date: item.date as string,
+          dateISO: typeof item.dateISO === 'string' ? item.dateISO : undefined,
+        }),
         isIncome: item.isIncome as boolean,
       };
     });
@@ -115,6 +121,7 @@ export function useTransactions(initialBalance: number, categories: CustomCatego
       categoryIconName: selectedCategory.iconName,
       amount: input.amount,
       date: dateStr,
+      dateISO: toLocalISODate(now),
       isIncome: input.isIncome,
     };
 

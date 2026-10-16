@@ -6,8 +6,6 @@ import {
   Moon,
   TrendingUp,
   TrendingDown,
-  ArrowUpRight,
-  ArrowDownRight,
   ChevronRight,
   Minus,
 } from 'lucide-react';
@@ -25,6 +23,8 @@ import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { BalanceAdjustSheet } from '@/components/BalanceAdjustSheet';
 import { BudgetEditSheet } from '@/components/BudgetEditSheet';
 import { formatCurrency, getBudgetStatus, type Transaction } from '@/data/mockData';
+import { resolveTransactionDateISO } from '@/data/transactionDates';
+import { StatisticsScreen } from '@/components/StatisticsScreen';
 
 const MONTHS_RU = [
   'Январь',
@@ -71,11 +71,27 @@ function App() {
     totalBalance,
   } = useTransactions(initialBalance, categories);
 
-  const monthlyGrowth = totalIncome - totalExpenses;
-  const safeToSpend = monthlyBudget - totalExpenses;
-  const budgetPercent = (totalExpenses / monthlyBudget) * 100;
-  const budgetStatus = getBudgetStatus(totalExpenses, monthlyBudget);
-  const isOverbudget = totalExpenses > monthlyBudget;
+  const currentMonthKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+  const currentMonthTransactions = useMemo(
+    () => transactions.filter((transaction) => resolveTransactionDateISO(transaction)?.startsWith(currentMonthKey)),
+    [transactions, currentMonthKey]
+  );
+  const monthlyIncome = currentMonthTransactions.reduce(
+    (sum, transaction) => sum + (transaction.isIncome ? transaction.amount : 0),
+    0
+  );
+  const monthlyExpenses = currentMonthTransactions.reduce(
+    (sum, transaction) => sum + (!transaction.isIncome ? transaction.amount : 0),
+    0
+  );
+  const monthlyGrowth = monthlyIncome - monthlyExpenses;
+  const safeToSpend = monthlyBudget - monthlyExpenses;
+  const budgetPercent = monthlyBudget > 0 ? (monthlyExpenses / monthlyBudget) * 100 : 0;
+  const budgetStatus = getBudgetStatus(monthlyExpenses, monthlyBudget);
+  const isOverbudget = monthlyExpenses > monthlyBudget;
 
   const progressGradient =
     budgetStatus === 'normal'
@@ -153,8 +169,16 @@ function App() {
       {/* Scrollable container */}
       <div className="relative mx-auto min-h-screen max-w-md overflow-y-auto no-scrollbar pb-32">
 
+        {activeTab === 'stats' ? (
+          <StatisticsScreen
+            transactions={transactions}
+            categories={categories}
+            onSelectTransaction={setSelectedTransaction}
+          />
+        ) : (
+          <>
         {/* === TOP HEADER (Digital Dome) === */}
-        <header className="relative overflow-hidden px-5 pt-12 pb-8">
+        <header className="relative overflow-hidden px-5 pt-12 pb-5">
           <ParticleBackground isDark={theme === 'dark'} />
 
           {/* Theme switcher */}
@@ -253,51 +277,6 @@ function App() {
             </div>
           </div>
 
-          {/* Income / Expense cards */}
-          <div
-            className="relative z-10 mt-6 grid grid-cols-2 gap-3 animate-fade-in-up"
-            style={{ animationDelay: '100ms' }}
-          >
-            {/* Income card */}
-            <div className="rounded-2xl neu-card p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-mint/10 dark:bg-mint/10">
-                  <ArrowUpRight className="h-4 w-4 text-mint dark:text-mint" />
-                </div>
-
-                <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                  Доход
-                </span>
-              </div>
-
-              <p className="mt-2.5 font-light tracking-tight text-2xl text-neutral-900 dark:text-white tabular-nums">
-                {formatCurrency(totalIncome)}
-                <span className="ml-1 text-sm text-neutral-400 dark:text-neutral-500">
-                  ₽
-                </span>
-              </p>
-            </div>
-
-            {/* Expense card */}
-            <div className="rounded-2xl neu-card p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800/50">
-                  <ArrowDownRight className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
-                </div>
-
-                <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                  Расход
-                </span>
-              </div>
-
-              <p className="mt-2.5 font-light tracking-tight text-2xl text-neutral-900 dark:text-white tabular-nums">
-                {formatCurrency(totalExpenses)}
-                <span className="ml-1 text-sm text-neutral-400 dark:text-neutral-500">
-                  ₽
-                </span>
-              </p>
-            </div>
-          </div>
         </header>
 
         {/* === MIDDLE SECTION (Semicircular Gauge) === */}
@@ -318,7 +297,7 @@ function App() {
 
             <div className="flex justify-center">
               <SemiGauge
-                spent={totalExpenses}
+                spent={monthlyExpenses}
                 budget={monthlyBudget}
                 safeToSpend={safeToSpend}
                 onEditBudget={() => setIsBudgetEditOpen(true)}
@@ -335,7 +314,7 @@ function App() {
               </div>
 
               <div className="mt-2 flex justify-between text-[10px] text-neutral-400 dark:text-neutral-500">
-                <span>{formatCurrency(totalExpenses)} ₽ потрачено</span>
+                <span>{formatCurrency(monthlyExpenses)} ₽ потрачено</span>
 
                 <span
                   className={
@@ -345,8 +324,8 @@ function App() {
                   }
                 >
                   {isOverbudget
-                    ? `-${formatCurrency(totalExpenses - monthlyBudget)} ₽ перерасход`
-                    : `${formatCurrency(Math.max(0, monthlyBudget - totalExpenses))} ₽ осталось`}
+                    ? `-${formatCurrency(monthlyExpenses - monthlyBudget)} ₽ перерасход`
+                    : `${formatCurrency(Math.max(0, monthlyBudget - monthlyExpenses))} ₽ осталось`}
                 </span>
               </div>
 
@@ -362,6 +341,8 @@ function App() {
             onSelect={setSelectedTransaction}
           />
         </section>
+          </>
+        )}
       </div>
 
       {/* Floating Island Tab Bar */}
