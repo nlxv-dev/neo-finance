@@ -18,7 +18,7 @@ import { ParticleBackground } from '@/components/ParticleBackground';
 import { SemiGauge } from '@/components/SemiGauge';
 import { TabBar } from '@/components/TabBar';
 import { TransactionList } from '@/components/TransactionList';
-import { AddTransactionSheet } from '@/components/AddTransactionSheet';
+import AddTransactionSheet from '@/components/AddTransactionSheet';
 import { ProfileSheet } from '@/components/ProfileSheet';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { BalanceAdjustSheet } from '@/components/BalanceAdjustSheet';
