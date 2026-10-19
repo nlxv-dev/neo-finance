@@ -1,9 +1,10 @@
 
 import { AnimatedCounter } from '@/components/AnimatedCounter';
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   Sun,
   Moon,
+  Contrast,
   TrendingUp,
   TrendingDown,
   ChevronRight,
@@ -42,7 +43,29 @@ const MONTHS_RU = [
 ];
 
 function App() {
-  const { theme, toggleTheme } = useTheme();
+  const { theme, themeMode, setThemeMode } = useTheme();
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const themeMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isThemeMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
+        setIsThemeMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsThemeMenuOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isThemeMenuOpen]);
   const [activeTab, setActiveTab] = useState('home');
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -182,7 +205,7 @@ function App() {
           <ParticleBackground isDark={theme === 'dark'} />
 
           {/* Theme switcher */}
-          <div className="relative z-10 flex items-center justify-between">
+          <div className="relative z-30 flex items-center justify-between">
             {/* Clickable profile block */}
             <button
               onClick={() => setIsProfileOpen(true)}
@@ -207,18 +230,62 @@ function App() {
               </div>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div ref={themeMenuRef} className="relative flex items-center gap-2">
               <button
-                onClick={toggleTheme}
-                className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm transition-transform active:scale-90 gpu"
-                aria-label="Переключить тему"
+                type="button"
+                onClick={() => setIsThemeMenuOpen((open) => !open)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm transition-transform active:scale-90 gpu focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/60"
+                aria-label={`Тема оформления: ${themeMode === 'system' ? 'системная' : themeMode === 'light' ? 'светлая' : 'тёмная'}`}
+                aria-haspopup="menu"
+                aria-expanded={isThemeMenuOpen}
               >
-                {theme === 'dark' ? (
-                  <Sun className="h-4 w-4 text-amber-400" />
+                {themeMode === 'system' ? (
+                  <Contrast className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
+                ) : themeMode === 'light' ? (
+                  <Sun className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
                 ) : (
-                  <Moon className="h-4 w-4 text-indigoblue" />
+                  <Moon className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
                 )}
               </button>
+
+              {isThemeMenuOpen && (
+                <div
+                  role="menu"
+                  aria-label="Тема оформления"
+                  className="absolute right-0 top-12 z-50 w-52 rounded-2xl border border-neutral-200/80 bg-white/95 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-900/95 dark:shadow-[0_16px_40px_rgba(0,0,0,0.48)] animate-fade-in"
+                >
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={themeMode === 'system'}
+                    onClick={() => { setThemeMode('system'); setIsThemeMenuOpen(false); }}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'system' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
+                  >
+                    <Contrast className="h-5 w-5 shrink-0" />
+                    <span>Системная</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={themeMode === 'light'}
+                    onClick={() => { setThemeMode('light'); setIsThemeMenuOpen(false); }}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'light' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
+                  >
+                    <Sun className="h-5 w-5 shrink-0" />
+                    <span>Светлая</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={themeMode === 'dark'}
+                    onClick={() => { setThemeMode('dark'); setIsThemeMenuOpen(false); }}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'dark' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
+                  >
+                    <Moon className="h-5 w-5 shrink-0" />
+                    <span>Тёмная</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
