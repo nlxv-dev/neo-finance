@@ -252,14 +252,14 @@ function App() {
                 <div
                   role="menu"
                   aria-label="Тема оформления"
-                  className="absolute right-0 top-12 z-50 w-52 rounded-2xl border border-neutral-200/80 bg-white/95 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-900/95 dark:shadow-[0_16px_40px_rgba(0,0,0,0.48)] animate-fade-in"
+                  className="absolute right-0 top-12 z-50 w-40 rounded-2xl border border-neutral-200/80 bg-white/95 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-900/95 dark:shadow-[0_16px_40px_rgba(0,0,0,0.48)] animate-fade-in"
                 >
                   <button
                     type="button"
                     role="menuitemradio"
                     aria-checked={themeMode === 'system'}
                     onClick={() => { setThemeMode('system'); setIsThemeMenuOpen(false); }}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'system' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
+                    className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'system' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
                   >
                     <Contrast className="h-5 w-5 shrink-0" />
                     <span>Системная</span>
@@ -269,7 +269,7 @@ function App() {
                     role="menuitemradio"
                     aria-checked={themeMode === 'light'}
                     onClick={() => { setThemeMode('light'); setIsThemeMenuOpen(false); }}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'light' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
+                    className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'light' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
                   >
                     <Sun className="h-5 w-5 shrink-0" />
                     <span>Светлая</span>
@@ -279,7 +279,7 @@ function App() {
                     role="menuitemradio"
                     aria-checked={themeMode === 'dark'}
                     onClick={() => { setThemeMode('dark'); setIsThemeMenuOpen(false); }}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'dark' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
+                    className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'dark' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
                   >
                     <Moon className="h-5 w-5 shrink-0" />
                     <span>Тёмная</span>
