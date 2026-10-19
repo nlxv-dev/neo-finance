@@ -11,6 +11,7 @@ import { formatCurrency, type Transaction } from '@/data/mockData';
 import type { CustomCategory } from '@/hooks/useCategories';
 import { IconRenderer } from '@/components/IconRenderer';
 import { DeleteConfirmationPanel } from '@/components/DeleteConfirmationPanel';
+import { AmountKeyboard, AmountTrigger } from '@/components/AmountKeyboard';
 
 type TxType = 'expense' | 'income';
 type TransactionUpdates = { amount: number; categoryId: string; isIncome: boolean };
@@ -35,6 +36,7 @@ export function TransactionDetailSheet({
   const [editAmount, setEditAmount] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
   const [editType, setEditType] = useState<TxType>('expense');
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
     if (!transaction) return;
@@ -42,6 +44,7 @@ export function TransactionDetailSheet({
     setEditAmount(String(transaction.amount));
     setEditCategoryId(transaction.categoryId ?? '');
     setEditType(transaction.isIncome ? 'income' : 'expense');
+    setKeyboardOpen(false);
   }, [transaction]);
 
   useEffect(() => {
@@ -75,6 +78,7 @@ export function TransactionDetailSheet({
     setEditCategoryId(current && current.isIncome === transaction.isIncome
       ? current.id
       : fallback?.id ?? '');
+    setKeyboardOpen(false);
     setMode('edit');
   };
 
@@ -106,12 +110,19 @@ export function TransactionDetailSheet({
       categoryId: selectedCategory.id,
       isIncome: editType === 'income',
     });
+    setKeyboardOpen(false);
     setMode('view');
+  };
+
+  const handleCloseSheet = () => {
+    setKeyboardOpen(false);
+    setMode('view');
+    onClose();
   };
 
   const handleDelete = () => {
     onDelete(transaction.id);
-    onClose();
+    handleCloseSheet();
   };
 
   return (
@@ -125,30 +136,36 @@ export function TransactionDetailSheet({
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
         }}
-        onClick={onClose}
+        onClick={() => (keyboardOpen ? setKeyboardOpen(false) : handleCloseSheet())}
       />
 
       <div
-        className={`fixed bottom-0 left-0 right-0 z-[70] mx-auto max-w-md rounded-t-3xl sheet-glass transition-all duration-300 ease-out gpu ${
+        onClick={(event) => {
+          if (mode !== 'edit' || !keyboardOpen) return;
+          const target = event.target as HTMLElement;
+          if (target.closest('[data-amount-trigger], [data-amount-keyboard], button, input, select, textarea')) return;
+          setKeyboardOpen(false);
+        }}
+        className={`fixed bottom-0 left-0 right-0 z-[70] mx-auto max-w-md rounded-t-3xl sheet-glass overflow-x-hidden ${mode === 'edit' && keyboardOpen ? 'overflow-y-auto' : 'overflow-hidden'} transition-all duration-300 ease-out gpu ${
           open
             ? 'translate-y-0 pointer-events-auto opacity-100'
             : 'translate-y-full pointer-events-none opacity-0'
         }`}
-        style={{ height: '60vh' }}
+        style={{ height: mode === 'edit' && keyboardOpen ? 'auto' : '60vh', maxHeight: mode === 'edit' && keyboardOpen ? '94dvh' : undefined }}
       >
         <div className="flex justify-center pt-3 pb-2">
           <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-600" />
         </div>
 
         <button
-          onClick={onClose}
+          onClick={handleCloseSheet}
           className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full neu-inset transition-transform active:scale-90 gpu"
           aria-label="Закрыть"
         >
           <X className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
         </button>
 
-        <div className="flex h-full flex-col px-6 pb-8 overflow-hidden">
+        <div style={{ height: mode === 'edit' && keyboardOpen ? 'auto' : 'calc(100% - 24px)' }} className={`flex flex-col px-6 ${mode === 'edit' && keyboardOpen ? 'pb-3' : 'pb-8 overflow-hidden'}`}>
           {mode === 'view' && (
             <ViewMode
               transaction={transaction}
@@ -169,7 +186,9 @@ export function TransactionDetailSheet({
               editType={editType}
               onTypeChange={handleEditTypeChange}
               onSave={handleSaveEdit}
-              onCancel={() => setMode('view')}
+              onCancel={() => { setKeyboardOpen(false); setMode('view'); }}
+              keyboardOpen={keyboardOpen}
+              setKeyboardOpen={setKeyboardOpen}
             />
           )}
 
@@ -289,6 +308,8 @@ function EditMode({
   onTypeChange,
   onSave,
   onCancel,
+  keyboardOpen,
+  setKeyboardOpen,
 }: {
   editAmount: string;
   setEditAmount: (value: string) => void;
@@ -299,20 +320,24 @@ function EditMode({
   onTypeChange: (type: TxType) => void;
   onSave: () => void;
   onCancel: () => void;
+  keyboardOpen: boolean;
+  setKeyboardOpen: (open: boolean) => void;
 }) {
   const parsedAmount = parseInt(editAmount.replace(/\D/g, ''), 10);
   const hasSelection = editCategories.some((category) => category.id === editCategoryId);
 
   return (
-    <>
+    <div className={`flex min-h-0 flex-col ${keyboardOpen ? 'overflow-visible' : 'h-full'}`}>
       <h2 className="mt-2 text-lg font-semibold text-neutral-900 dark:text-white">
         Редактировать
       </h2>
-      <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
-        Измените тип, сумму и категорию
-      </p>
+      {!keyboardOpen && (
+        <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
+          Измените тип, сумму и категорию
+        </p>
+      )}
 
-      <div className="mt-4 flex gap-2">
+      <div className={`${keyboardOpen ? 'mt-3' : 'mt-4'} flex shrink-0 gap-2`}>
         {(['expense', 'income'] as const).map((type) => (
           <button
             key={type}
@@ -335,20 +360,23 @@ function EditMode({
         ))}
       </div>
 
-      <div className="mt-5 flex flex-col items-center">
-        <div className="flex items-baseline justify-center">
-          <input
-            type="text"
-            inputMode="numeric"
-            value={editAmount ? formatCurrency(parseInt(editAmount.replace(/\D/g, ''), 10)) : ''}
-            onChange={(event) => setEditAmount(event.target.value.replace(/\D/g, '').slice(0, 9))}
-            className="w-full bg-transparent text-center font-light tracking-tight text-4xl text-neutral-900 dark:text-white tabular-nums outline-none"
+      <div className={`${keyboardOpen ? 'mt-3' : 'mt-5'} flex shrink-0 flex-col items-center`}>
+        <div className="flex w-full items-baseline justify-center">
+          <AmountTrigger
+            value={editAmount}
+            onChange={setEditAmount}
+            keyboardOpen={keyboardOpen}
+            onToggleKeyboard={() => setKeyboardOpen(!keyboardOpen)}
+            onOpenKeyboard={() => setKeyboardOpen(true)}
+            onCloseKeyboard={() => setKeyboardOpen(false)}
+            label="Сумма редактируемой транзакции в рублях"
+            keyboardId="edit-transaction-amount-keyboard"
+            size="medium"
           />
-          <span className="ml-1 text-xl font-light text-neutral-400 dark:text-neutral-500">₽</span>
         </div>
       </div>
 
-      <div className="mt-5 min-h-0">
+      {!keyboardOpen && <div className="mt-5 min-h-0 flex-1">
         <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
           Категория
         </p>
@@ -384,11 +412,40 @@ function EditMode({
             })}
           </div>
         )}
-      </div>
+      </div>}
 
-      <div className="flex-1" />
+      {keyboardOpen && (
+        <div className="mt-4 flex min-h-0 flex-col gap-2.5">
+          <div className="flex shrink-0 gap-2.5">
+            <button
+              onClick={onCancel}
+              className="flex-1 rounded-2xl py-3 text-sm font-medium text-neutral-500 neu-card-sm transition-all duration-200 active:scale-[0.98] gpu dark:text-neutral-400"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={onSave}
+              disabled={!parsedAmount || parsedAmount <= 0 || !hasSelection}
+              className="flex flex-[2] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40 disabled:active:scale-100"
+            >
+              <Check className="h-4 w-4" strokeWidth={2.5} />
+              Сохранить
+            </button>
+          </div>
+          <AmountKeyboard
+            id="edit-transaction-amount-keyboard"
+            value={editAmount}
+            onChange={setEditAmount}
+            onClose={() => setKeyboardOpen(false)}
+            label="Клавиатура суммы редактируемой транзакции"
+            replaceOnFirstDigit
+          />
+        </div>
+      )}
 
-      <div className="flex gap-2.5 pt-3">
+      {!keyboardOpen && <div className="flex-1" />}
+
+      {!keyboardOpen && <div className="flex gap-2.5 pt-3">
         <button
           onClick={onCancel}
           className="flex-1 rounded-2xl py-3.5 text-sm font-medium text-neutral-500 dark:text-neutral-400 neu-card-sm transition-all duration-200 active:scale-[0.98] gpu"
@@ -403,8 +460,8 @@ function EditMode({
           <Check className="h-4 w-4" strokeWidth={2.5} />
           Сохранить
         </button>
-      </div>
-    </>
+      </div>}
+    </div>
   );
 }
 
