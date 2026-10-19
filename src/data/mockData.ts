@@ -1,7 +1,6 @@
 import {
   Briefcase,
   ShoppingCart,
-  Coffee,
   Home,
   Film,
   Car,

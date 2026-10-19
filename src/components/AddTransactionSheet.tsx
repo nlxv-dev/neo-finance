@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   X,
   Check,
@@ -71,8 +71,11 @@ export function AddTransactionSheet({
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const filteredCategories = categories.filter(
-    (cat) => !cat.isArchived && cat.isIncome === (txType === 'income')
+  const filteredCategories = useMemo(
+    () => categories.filter(
+      (cat) => !cat.isArchived && cat.isIncome === (txType === 'income')
+    ),
+    [categories, txType]
   );
 
   useEffect(() => {
@@ -88,7 +91,7 @@ export function AddTransactionSheet({
     if (!currentExists) {
       setSelectedCategoryId(filteredCategories[0].id);
     }
-  }, [txType, open, categories, selectedCategoryId]);
+  }, [filteredCategories, selectedCategoryId]);
 
   useEffect(() => {
     if (open) {

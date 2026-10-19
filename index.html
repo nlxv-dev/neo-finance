@@ -4,8 +4,37 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/neo-finance/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <meta id="theme-color" name="theme-color" content="#ffffff" />
+    <script>
+      (() => {
+        const storageKey = 'fintrack-theme';
+        let mode = 'light';
+
+        try {
+          const savedMode = localStorage.getItem(storageKey);
+          if (savedMode === 'system' || savedMode === 'light' || savedMode === 'dark') {
+            mode = savedMode;
+          }
+        } catch {
+          // Use the light default if local storage is unavailable.
+        }
+
+        const prefersDark =
+          typeof window.matchMedia === 'function' &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = mode === 'system' ? (prefersDark ? 'dark' : 'light') : mode;
+        const root = document.documentElement;
+
+        root.classList.toggle('dark', theme === 'dark');
+        root.dataset.themeMode = mode;
+        root.dataset.theme = theme;
+        root.style.colorScheme = theme;
+
+        const themeColor = document.getElementById('theme-color');
+        if (themeColor) themeColor.setAttribute('content', theme === 'dark' ? '#000000' : '#ffffff');
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="NeoFinance" />

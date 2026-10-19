@@ -86,6 +86,6 @@ export function resolveTransactionDateISO(
 
 export function formatISODateShort(isoDate: string): string {
   if (!isISODateString(isoDate)) return isoDate;
-  const [year, month, day] = isoDate.split('-').map(Number);
+  const [, month, day] = isoDate.split('-').map(Number);
   return `${day} ${LEGACY_MONTHS[month - 1]}`;
 }

@@ -11,6 +11,11 @@
 
   html {
     font-family: 'Inter', system-ui, sans-serif;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
