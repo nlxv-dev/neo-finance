@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Check,
@@ -9,11 +9,11 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import { formatCurrency } from '@/data/mockData';
 import type { CustomCategory } from '@/hooks/useCategories';
 import { IconRenderer } from '@/components/IconRenderer';
 import { DeleteConfirmationPanel } from '@/components/DeleteConfirmationPanel';
 import { ICON_GROUPS } from '@/data/iconsConfig';
+import { AmountKeyboard, AmountTrigger } from '@/components/AmountKeyboard';
 
 const ICON_GROUP_NAMES = Object.keys(ICON_GROUPS);
 const DEFAULT_ICON_GROUP = ICON_GROUP_NAMES.includes('Деньги')
@@ -55,6 +55,7 @@ export function AddTransactionSheet({
 }: AddTransactionSheetProps) {
   const [txType, setTxType] = useState<TxType>('expense');
   const [amount, setAmount] = useState('');
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
 
   // Состояния для конструктора категорий
@@ -69,7 +70,6 @@ export function AddTransactionSheet({
   const [categoryError, setCategoryError] = useState('');
   const [categoryToDeleteId, setCategoryToDeleteId] = useState<string | null>(null);
 
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const filteredCategories = useMemo(
     () => categories.filter(
@@ -95,10 +95,12 @@ export function AddTransactionSheet({
 
   useEffect(() => {
     if (open) {
-      const timer = setTimeout(() => inputRef.current?.focus(), 350);
-      return () => clearTimeout(timer);
+      setKeyboardOpen(false);
+      return;
     }
+
     setAmount('');
+    setKeyboardOpen(false);
     setTxType('expense');
     setIsCreatingCategory(false);
     setEditingCategoryId(null);
@@ -133,6 +135,7 @@ export function AddTransactionSheet({
       categoryId: currentCategory.id,
       isIncome: txType === 'income',
     });
+    setKeyboardOpen(false);
     onClose();
   };
 
@@ -239,16 +242,22 @@ export function AddTransactionSheet({
           backdropFilter: 'blur(4px)',
           WebkitBackdropFilter: 'blur(4px)',
         }}
-        onClick={onClose}
+        onClick={() => (keyboardOpen ? setKeyboardOpen(false) : onClose())}
       />
 
       <div
-        className={`fixed bottom-0 left-0 right-0 z-[70] mx-auto max-w-md rounded-t-3xl sheet-glass transition-all duration-300 ease-out gpu ${
+        onClick={(event) => {
+          if (!keyboardOpen) return;
+          const target = event.target as HTMLElement;
+          if (target.closest('[data-amount-trigger], [data-amount-keyboard], button, input, select, textarea')) return;
+          setKeyboardOpen(false);
+        }}
+        className={`fixed bottom-0 left-0 right-0 z-[70] mx-auto max-w-md rounded-t-3xl sheet-glass overflow-x-hidden ${keyboardOpen ? 'overflow-y-auto' : 'overflow-hidden'} transition-all duration-300 ease-out gpu ${
           open
             ? 'translate-y-0 pointer-events-auto opacity-100'
             : 'translate-y-full pointer-events-none opacity-0'
         }`}
-        style={{ height: '75vh' }}
+        style={{ height: keyboardOpen ? 'auto' : '75vh', maxHeight: keyboardOpen ? '94dvh' : undefined }}
       >
         <div className="flex justify-center pt-3 pb-2">
           <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-600" />
@@ -262,7 +271,7 @@ export function AddTransactionSheet({
           <X className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
         </button>
 
-        <div className="flex h-full flex-col px-6 pb-8 overflow-hidden">
+        <div style={{ height: keyboardOpen ? 'auto' : 'calc(100% - 24px)' }} className={`flex flex-col px-6 ${keyboardOpen ? 'pb-3' : 'pb-8 overflow-hidden'}`}>
           {categoryPendingDeletion ? (
             <DeleteConfirmationPanel
               title="Удалить категорию?"
@@ -272,15 +281,17 @@ export function AddTransactionSheet({
             />
           ) : !isCreatingCategory ? (
             /* РЕЖИМ 1: ДОБАВЛЕНИЕ ТРАНЗАКЦИИ */
-            <div className="flex flex-col h-full overflow-y-auto no-scrollbar p-1">
+            <div className={`flex h-full min-h-0 flex-col p-1 ${keyboardOpen ? 'overflow-hidden' : 'overflow-y-auto no-scrollbar'}` }>
               <h2 className="mt-2 text-lg font-semibold text-neutral-900 dark:text-white">
                 Новая транзакция
               </h2>
-              <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
-                Введите сумму и выберите категорию
-              </p>
+              {!keyboardOpen && (
+                <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
+                  Введите сумму и выберите категорию
+                </p>
+              )}
 
-              <div className="mt-4 flex gap-2">
+              <div className={`${keyboardOpen ? 'mt-3' : 'mt-4'} flex gap-2 shrink-0`}>
                 {(['expense', 'income'] as const).map((t) => (
                   <button
                     key={t}
@@ -303,33 +314,23 @@ export function AddTransactionSheet({
                 ))}
               </div>
 
-              <div className="mt-6 flex flex-col items-center">
-                <div className="flex items-baseline justify-center">
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    inputMode="numeric"
-                    value={
-                      amount
-                        ? formatCurrency(
-                            parseInt(amount.replace(/\D/g, ''), 10)
-                          )
-                        : ''
-                    }
-                    onChange={(e) =>
-                      setAmount(
-                        e.target.value.replace(/\D/g, '').slice(0, 9)
-                      )
-                    }
-                    className="w-full bg-transparent text-center font-light tracking-tight text-5xl text-neutral-900 dark:text-white tabular-nums outline-none"
+              <div className={`${keyboardOpen ? 'mt-3' : 'mt-6'} flex shrink-0 flex-col items-center`}>
+                <div className="flex w-full items-baseline justify-center">
+                  <AmountTrigger
+                    value={amount}
+                    onChange={setAmount}
+                    keyboardOpen={keyboardOpen}
+                    onToggleKeyboard={() => setKeyboardOpen((value) => !value)}
+                    onOpenKeyboard={() => setKeyboardOpen(true)}
+                    onCloseKeyboard={() => setKeyboardOpen(false)}
+                    label="Сумма транзакции в рублях"
+                    keyboardId="transaction-amount-keyboard"
+                    showCurrency={false}
                   />
-                  <span className="ml-1 text-2xl font-light text-neutral-400 dark:text-neutral-500">
-                    ₽
-                  </span>
                 </div>
               </div>
 
-              <div className="mt-6 flex-1">
+              {!keyboardOpen && <div className="mt-6 min-h-0 flex-1">
                 <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   Категория
                 </p>
@@ -387,9 +388,29 @@ export function AddTransactionSheet({
                     </span>
                   </button>
                 </div>
-              </div>
+              </div>}
 
-              <button
+              {keyboardOpen && (
+                <div className="mt-4 flex min-h-0 flex-col gap-2.5">
+                  <button
+                    onClick={handleSave}
+                    disabled={!amount || parseInt(amount.replace(/\D/g, ''), 10) <= 0 || !filteredCategories.some((cat) => cat.id === selectedCategoryId)}
+                    className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40"
+                  >
+                    <Check className="h-4 w-4" strokeWidth={2.5} />
+                    Сохранить транзакцию
+                  </button>
+                  <AmountKeyboard
+                    id="transaction-amount-keyboard"
+                    value={amount}
+                    onChange={setAmount}
+                    onClose={() => setKeyboardOpen(false)}
+                    label="Клавиатура суммы новой транзакции"
+                  />
+                </div>
+              )}
+
+              {!keyboardOpen && <button
                 onClick={handleSave}
                 disabled={
                   !amount ||
@@ -400,7 +421,7 @@ export function AddTransactionSheet({
               >
                 <Check className="h-4 w-4" strokeWidth={2.5} />
                 Сохранить транзакцию
-              </button>
+              </button>}
             </div>
           ) : (
             /* РЕЖИМ 2: КОНСТРУКТОР КАТЕГОРИИ (ПРОГРЕССИВНОЕ РАСКРЫТИЕ) */
@@ -564,3 +585,6 @@ export function AddTransactionSheet({
     </>
   );
 }
+
+// Default export matches the application import; named export remains available for compatibility.
+export default AddTransactionSheet;
