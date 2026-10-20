@@ -1,10 +1,7 @@
 
 import { AnimatedCounter } from '@/components/AnimatedCounter';
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
-  Sun,
-  Moon,
-  Contrast,
   TrendingUp,
   TrendingDown,
   ChevronRight,
@@ -46,37 +43,6 @@ const MONTHS_RU = [
 
 function App() {
   const { theme, themeMode, setThemeMode } = useTheme();
-  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
-  const themeMenuRef = useRef<HTMLDivElement>(null);
-  const themeTriggerRef = useRef<HTMLButtonElement>(null);
-  const activeThemeOptionRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!isThemeMenuOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (themeMenuRef.current && !themeMenuRef.current.contains(event.target as Node)) {
-        setIsThemeMenuOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsThemeMenuOpen(false);
-        window.requestAnimationFrame(() => themeTriggerRef.current?.focus());
-      }
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isThemeMenuOpen]);
-
-  useEffect(() => {
-    if (isThemeMenuOpen) activeThemeOptionRef.current?.focus();
-  }, [isThemeMenuOpen]);
 
   const [activeTab, setActiveTab] = useState('home');
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -254,11 +220,11 @@ function App() {
         <header className="relative overflow-hidden px-5 pt-12 pb-5">
           <ParticleBackground isDark={theme === 'dark'} />
 
-          {/* Theme switcher */}
-          <div className="relative z-30 flex items-center justify-between">
+          {/* Profile/settings entry */}
+          <div className="relative z-30 flex items-center">
             {/* Clickable profile block */}
             <button
-              onClick={() => { setIsThemeMenuOpen(false); setIsSettingsOpen(true); }}
+              onClick={() => setIsSettingsOpen(true)}
               className="flex items-center gap-2 transition-transform active:scale-95 gpu"
               aria-label="Открыть настройки"
             >
@@ -280,65 +246,6 @@ function App() {
               </div>
             </button>
 
-            <div ref={themeMenuRef} className="relative z-40 h-9 w-9 shrink-0">
-              {isThemeMenuOpen ? (
-                <div
-                  role="group"
-                  aria-label="Быстрое переключение темы"
-                  className="absolute right-0 top-0 z-50 flex flex-col gap-1 rounded-2xl border border-neutral-200/80 bg-white/95 p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.13)] backdrop-blur-2xl animate-fade-in-up dark:border-white/10 dark:bg-neutral-900/95 dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)]"
-                >
-                  <button
-                    ref={themeMode === 'system' ? activeThemeOptionRef : null}
-                    type="button"
-                    aria-label="Системная тема"
-                    title="Системная"
-                    aria-pressed={themeMode === 'system'}
-                    onClick={() => { setThemeMode('system'); setIsThemeMenuOpen(false); window.requestAnimationFrame(() => themeTriggerRef.current?.focus()); }}
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${themeMode === 'system' ? 'bg-gradient-to-br from-mint/25 via-white/80 to-indigo-400/20 text-neutral-800 ring-1 ring-indigo-300/40 shadow-[0_2px_10px_rgba(99,102,241,0.08)] dark:from-mint/15 dark:via-white/[0.05] dark:to-indigo-400/20 dark:text-white dark:ring-indigo-300/20' : 'text-neutral-500 hover:bg-neutral-100/80 dark:text-neutral-300 dark:hover:bg-white/10'}`}
-                  >
-                    <Contrast className="h-[18px] w-[18px]" />
-                  </button>
-                  <button
-                    ref={themeMode === 'light' ? activeThemeOptionRef : null}
-                    type="button"
-                    aria-label="Светлая тема"
-                    title="Светлая"
-                    aria-pressed={themeMode === 'light'}
-                    onClick={() => { setThemeMode('light'); setIsThemeMenuOpen(false); window.requestAnimationFrame(() => themeTriggerRef.current?.focus()); }}
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${themeMode === 'light' ? 'bg-gradient-to-br from-mint/25 via-white/80 to-indigo-400/20 text-neutral-800 ring-1 ring-indigo-300/40 shadow-[0_2px_10px_rgba(99,102,241,0.08)] dark:from-mint/15 dark:via-white/[0.05] dark:to-indigo-400/20 dark:text-white dark:ring-indigo-300/20' : 'text-neutral-500 hover:bg-neutral-100/80 dark:text-neutral-300 dark:hover:bg-white/10'}`}
-                  >
-                    <Sun className="h-[18px] w-[18px]" />
-                  </button>
-                  <button
-                    ref={themeMode === 'dark' ? activeThemeOptionRef : null}
-                    type="button"
-                    aria-label="Тёмная тема"
-                    title="Тёмная"
-                    aria-pressed={themeMode === 'dark'}
-                    onClick={() => { setThemeMode('dark'); setIsThemeMenuOpen(false); window.requestAnimationFrame(() => themeTriggerRef.current?.focus()); }}
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${themeMode === 'dark' ? 'bg-gradient-to-br from-mint/25 via-white/80 to-indigo-400/20 text-neutral-800 ring-1 ring-indigo-300/40 shadow-[0_2px_10px_rgba(99,102,241,0.08)] dark:from-mint/15 dark:via-white/[0.05] dark:to-indigo-400/20 dark:text-white dark:ring-indigo-300/20' : 'text-neutral-500 hover:bg-neutral-100/80 dark:text-neutral-300 dark:hover:bg-white/10'}`}
-                  >
-                    <Moon className="h-[18px] w-[18px]" />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  ref={themeTriggerRef}
-                  type="button"
-                  onClick={() => setIsThemeMenuOpen(true)}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm transition-transform active:scale-90 gpu focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/60"
-                  aria-label={`Тема оформления: ${themeMode === 'system' ? 'системная' : themeMode === 'light' ? 'светлая' : 'тёмная'}. Открыть выбор темы`}
-                >
-                  {themeMode === 'system' ? (
-                    <Contrast className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
-                  ) : themeMode === 'light' ? (
-                    <Sun className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
-                  ) : (
-                    <Moon className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
-                  )}
-                </button>
-              )}
-            </div>
           </div>
 
           {/* Balance display — clickable to adjust */}
