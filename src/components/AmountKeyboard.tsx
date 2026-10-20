@@ -16,6 +16,8 @@ interface AmountTriggerProps {
   size?: 'large' | 'medium';
   /** Hide the currency suffix when the surrounding form already establishes the currency. */
   showCurrency?: boolean;
+  /** Show a muted visual zero while the amount is empty; it is not part of the input value. */
+  showZeroPlaceholder?: boolean;
 }
 
 /** Button styled as the amount field. Using a button guarantees no OS keyboard is summoned. */
@@ -30,6 +32,7 @@ export function AmountTrigger({
   keyboardId,
   size = 'large',
   showCurrency = true,
+  showZeroPlaceholder = false,
 }: AmountTriggerProps) {
   const displayedValue = value ? formatCurrency(Number(value)) : '';
 
@@ -56,7 +59,7 @@ export function AmountTrigger({
       className={`min-h-[56px] min-w-[112px] flex-1 cursor-pointer rounded-xl bg-transparent px-2 text-center font-light tracking-tight text-neutral-900 outline-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-mint/50 dark:text-white ${size === 'large' ? 'text-[clamp(2rem,10vw,3rem)]' : 'text-[clamp(1.75rem,9vw,2.25rem)]'}`}
     >
       <span className={displayedValue ? '' : 'text-neutral-300 dark:text-neutral-600'}>
-        {displayedValue || '0'}
+        {displayedValue || (showZeroPlaceholder ? '0' : '')}
       </span>
       {showCurrency && (
         <span className="ml-1 text-[0.62em] font-light text-neutral-400 dark:text-neutral-500">₽</span>
