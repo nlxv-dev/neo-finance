@@ -26,6 +26,8 @@ import { BudgetEditSheet } from '@/components/BudgetEditSheet';
 import { formatCurrency, getBudgetStatus, type Transaction } from '@/data/mockData';
 import { resolveTransactionDateISO } from '@/data/transactionDates';
 import { StatisticsScreen } from '@/components/StatisticsScreen';
+import { StorageRecoveryNotice } from '@/components/StorageRecoveryNotice';
+import { downloadRecoverySnapshot } from '@/storage/safeLocalStorage';
 
 const MONTHS_RU = [
   'Январь',
@@ -79,8 +81,18 @@ function App() {
     updateInitialBalance,
     monthlyBudget,
     updateMonthlyBudget,
+    storageIssues: profileStorageIssues,
   } = useProfile();
-  const { categories, addCategory, updateCategory, deleteCategory } = useCategories();
+  const {
+    categories,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    storageIssues: categoryStorageIssues,
+  } = useCategories();
+  const hasUnreadableProfileData = profileStorageIssues.some((issue) => issue.kind !== 'write-failed');
+  const hasUnreadableCategories = categoryStorageIssues.some((issue) => issue.kind !== 'write-failed');
+  const canPersistTransactions = !hasUnreadableProfileData && !hasUnreadableCategories;
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   const {
@@ -92,7 +104,20 @@ function App() {
     totalIncome,
     totalExpenses,
     totalBalance,
-  } = useTransactions(initialBalance, categories);
+    storageIssues: transactionStorageIssues,
+  } = useTransactions(initialBalance, categories, canPersistTransactions);
+
+  const storageIssues = [...profileStorageIssues, ...categoryStorageIssues, ...transactionStorageIssues];
+  const handleDownloadRecovery = () => {
+    downloadRecoverySnapshot(
+      {
+        transactions,
+        categories,
+        profile: { userName, initialBalance, monthlyBudget },
+      },
+      storageIssues
+    );
+  };
 
   const currentMonthKey = useMemo(() => {
     const now = new Date();
@@ -465,6 +490,8 @@ function App() {
         onUpdateInitialBalance={updateInitialBalance}
         onResetData={handleResetData}
       />
+
+      <StorageRecoveryNotice issues={storageIssues} onDownloadRecovery={handleDownloadRecovery} />
     </div>
   );
 }
