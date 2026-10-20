@@ -1,4 +1,6 @@
-import { AlertTriangle, Download, HardDrive } from 'lucide-react';
+import { AlertTriangle, Download, FileJson, HardDrive, Upload } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { restoreJsonBackupToStorage, validateBackupFile, type BackupFile } from '@/backup/backupService';
 import type { StorageIssue } from '@/storage/safeLocalStorage';
 
 interface StorageRecoveryNoticeProps {
@@ -30,10 +32,40 @@ function getIssueLabel(issue: StorageIssue): string {
 }
 
 export function StorageRecoveryNotice({ issues, onDownloadRecovery }: StorageRecoveryNoticeProps) {
+  const [pendingBackup, setPendingBackup] = useState<BackupFile | null>(null);
+  const [importError, setImportError] = useState('');
+  const importInputRef = useRef<HTMLInputElement>(null);
+
   if (issues.length === 0) return null;
 
   const readIssues = issues.filter((issue) => issue.kind !== 'write-failed');
   const hasCriticalReadIssue = readIssues.length > 0;
+
+  const handleBackupFile = async (file?: File) => {
+    setImportError('');
+    setPendingBackup(null);
+    if (!file) return;
+    try {
+      if (file.size > 50 * 1024 * 1024) throw new Error('Файл слишком большой. Максимальный размер — 50 МБ.');
+      const parsed = JSON.parse(await file.text()) as unknown;
+      setPendingBackup(validateBackupFile(parsed));
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : 'Не удалось прочитать резервную копию.');
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = '';
+    }
+  };
+
+  const handleRestore = () => {
+    if (!pendingBackup) return;
+    try {
+      restoreJsonBackupToStorage(pendingBackup);
+      window.location.reload();
+    } catch (error) {
+      setPendingBackup(null);
+      setImportError(error instanceof Error ? error.message : 'Не удалось восстановить резервную копию.');
+    }
+  };
 
   if (hasCriticalReadIssue) {
     return (
@@ -62,16 +94,24 @@ export function StorageRecoveryNotice({ issues, onDownloadRecovery }: StorageRec
               ))}
             </ul>
           </div>
-          <button
-            type="button"
-            onClick={onDownloadRecovery}
-            className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue px-4 py-3 text-sm font-semibold text-white transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/70 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-950"
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            Скачать файл восстановления
+          {pendingBackup ? (
+            <div className="mt-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300"><FileJson className="h-4 w-4" /> Резервная копия проверена</div>
+              <p className="mt-1 text-xs leading-5 text-neutral-600 dark:text-neutral-300">Будут восстановлены {pendingBackup.data.transactions.length} транзакций и {pendingBackup.data.categories.length} категорий, а также профиль, бюджет и тема. Повреждённые локальные значения будут заменены.</p>
+              <button type="button" onClick={handleRestore} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-mint to-indigoblue px-3 py-2 text-sm font-semibold text-neutral-950"><Upload className="h-4 w-4" /> Восстановить из JSON</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => importInputRef.current?.click()} className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue px-4 py-3 text-sm font-semibold text-neutral-950 transition-transform active:scale-[0.98]">
+              <FileJson className="h-4 w-4" aria-hidden="true" /> Восстановить из JSON-копии
+            </button>
+          )}
+          <input ref={importInputRef} type="file" accept=".json,application/json" className="hidden" onChange={(event) => void handleBackupFile(event.target.files?.[0])} />
+          {importError && <p role="alert" className="mt-3 rounded-xl bg-red-500/10 p-3 text-xs leading-5 text-red-600 dark:text-red-300">{importError}</p>}
+          <button type="button" onClick={onDownloadRecovery} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl neu-inset px-4 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-200">
+            <Download className="h-4 w-4" aria-hidden="true" /> Скачать исходные данные для диагностики
           </button>
           <p className="mt-3 text-center text-[11px] leading-4 text-neutral-400 dark:text-neutral-500">
-            Файл содержит исходные строки доступных ключей и текущий снимок состояния. Это аварийный файл, не обычная резервная копия.
+            Диагностический файл сохраняет исходные строки повреждённых ключей. Он не является обычной резервной копией и не может импортироваться как JSON-бэкап.
           </p>
         </section>
       </div>
