@@ -19,7 +19,7 @@ import { SemiGauge } from '@/components/SemiGauge';
 import { TabBar } from '@/components/TabBar';
 import { TransactionList } from '@/components/TransactionList';
 import AddTransactionSheet from '@/components/AddTransactionSheet';
-import { ProfileSheet } from '@/components/ProfileSheet';
+import { SettingsScreen } from '@/components/SettingsScreen';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { BalanceAdjustSheet } from '@/components/BalanceAdjustSheet';
 import { BudgetEditSheet } from '@/components/BudgetEditSheet';
@@ -48,6 +48,8 @@ function App() {
   const { theme, themeMode, setThemeMode } = useTheme();
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const themeMenuRef = useRef<HTMLDivElement>(null);
+  const themeTriggerRef = useRef<HTMLButtonElement>(null);
+  const activeThemeOptionRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isThemeMenuOpen) return;
@@ -58,7 +60,10 @@ function App() {
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsThemeMenuOpen(false);
+      if (event.key === 'Escape') {
+        setIsThemeMenuOpen(false);
+        window.requestAnimationFrame(() => themeTriggerRef.current?.focus());
+      }
     };
 
     document.addEventListener('pointerdown', handlePointerDown);
@@ -68,9 +73,14 @@ function App() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isThemeMenuOpen]);
+
+  useEffect(() => {
+    if (isThemeMenuOpen) activeThemeOptionRef.current?.focus();
+  }, [isThemeMenuOpen]);
+
   const [activeTab, setActiveTab] = useState('home');
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isBalanceAdjustOpen, setIsBalanceAdjustOpen] = useState(false);
   const [isBudgetEditOpen, setIsBudgetEditOpen] = useState(false);
 
@@ -98,7 +108,6 @@ function App() {
   const {
     transactions,
     addTransaction,
-    resetTransactions,
     updateTransaction,
     deleteTransaction,
     totalIncome,
@@ -162,10 +171,6 @@ function App() {
     [addTransaction]
   );
 
-  const handleResetData = useCallback(() => {
-    resetTransactions();
-  }, [resetTransactions]);
-
   const handleBalanceAdjust = useCallback(
     (targetBalance: number) => {
       const newInitialBalance = targetBalance - totalIncome + totalExpenses;
@@ -214,6 +219,26 @@ function App() {
 
   return (
     <div className="relative min-h-screen bg-white dark:bg-amoled transition-colors duration-300">
+      {isSettingsOpen ? (
+        <SettingsScreen
+          onClose={() => setIsSettingsOpen(false)}
+          userName={userName}
+          initialBalance={initialBalance}
+          monthlyBudget={monthlyBudget}
+          updateName={updateName}
+          updateInitialBalance={updateInitialBalance}
+          themeMode={themeMode}
+          setThemeMode={setThemeMode}
+          transactions={transactions}
+          categories={categories}
+          addCategory={addCategory}
+          updateCategory={updateCategory}
+          deleteCategory={handleDeleteCategory}
+          onDownloadRecovery={handleDownloadRecovery}
+          storageWriteFailed={storageIssues.some((issue) => issue.kind === 'write-failed')}
+        />
+      ) : (
+        <>
       {/* Scrollable container */}
       <div className="relative mx-auto min-h-screen max-w-md overflow-y-auto no-scrollbar pb-32">
 
@@ -233,12 +258,12 @@ function App() {
           <div className="relative z-30 flex items-center justify-between">
             {/* Clickable profile block */}
             <button
-              onClick={() => setIsProfileOpen(true)}
+              onClick={() => { setIsThemeMenuOpen(false); setIsSettingsOpen(true); }}
               className="flex items-center gap-2 transition-transform active:scale-95 gpu"
-              aria-label="Открыть профиль"
+              aria-label="Открыть настройки"
             >
               <div className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm">
-                <span className="text-sm font-bold gradient-text">F</span>
+                <span className="text-sm font-bold gradient-text">N</span>
               </div>
 
               <div className="text-left">
@@ -255,61 +280,63 @@ function App() {
               </div>
             </button>
 
-            <div ref={themeMenuRef} className="relative flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsThemeMenuOpen((open) => !open)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm transition-transform active:scale-90 gpu focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/60"
-                aria-label={`Тема оформления: ${themeMode === 'system' ? 'системная' : themeMode === 'light' ? 'светлая' : 'тёмная'}`}
-                aria-haspopup="menu"
-                aria-expanded={isThemeMenuOpen}
-              >
-                {themeMode === 'system' ? (
-                  <Contrast className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
-                ) : themeMode === 'light' ? (
-                  <Sun className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
-                ) : (
-                  <Moon className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
-                )}
-              </button>
-
-              {isThemeMenuOpen && (
+            <div ref={themeMenuRef} className="relative z-40 h-9 w-9 shrink-0">
+              {isThemeMenuOpen ? (
                 <div
-                  role="menu"
-                  aria-label="Тема оформления"
-                  className="absolute right-0 top-12 z-50 w-40 rounded-2xl border border-neutral-200/80 bg-white/95 p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.16)] backdrop-blur-2xl dark:border-white/10 dark:bg-neutral-900/95 dark:shadow-[0_16px_40px_rgba(0,0,0,0.48)] animate-fade-in"
+                  role="group"
+                  aria-label="Быстрое переключение темы"
+                  className="absolute right-0 top-0 z-50 flex flex-col gap-1 rounded-2xl border border-neutral-200/80 bg-white/95 p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.13)] backdrop-blur-2xl animate-fade-in-up dark:border-white/10 dark:bg-neutral-900/95 dark:shadow-[0_12px_32px_rgba(0,0,0,0.4)]"
                 >
                   <button
+                    ref={themeMode === 'system' ? activeThemeOptionRef : null}
                     type="button"
-                    role="menuitemradio"
-                    aria-checked={themeMode === 'system'}
-                    onClick={() => { setThemeMode('system'); setIsThemeMenuOpen(false); }}
-                    className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'system' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
+                    aria-label="Системная тема"
+                    title="Системная"
+                    aria-pressed={themeMode === 'system'}
+                    onClick={() => { setThemeMode('system'); setIsThemeMenuOpen(false); window.requestAnimationFrame(() => themeTriggerRef.current?.focus()); }}
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${themeMode === 'system' ? 'bg-gradient-to-br from-mint/25 via-white/80 to-indigo-400/20 text-neutral-800 ring-1 ring-indigo-300/40 shadow-[0_2px_10px_rgba(99,102,241,0.08)] dark:from-mint/15 dark:via-white/[0.05] dark:to-indigo-400/20 dark:text-white dark:ring-indigo-300/20' : 'text-neutral-500 hover:bg-neutral-100/80 dark:text-neutral-300 dark:hover:bg-white/10'}`}
                   >
-                    <Contrast className="h-5 w-5 shrink-0" />
-                    <span>Системная</span>
+                    <Contrast className="h-[18px] w-[18px]" />
                   </button>
                   <button
+                    ref={themeMode === 'light' ? activeThemeOptionRef : null}
                     type="button"
-                    role="menuitemradio"
-                    aria-checked={themeMode === 'light'}
-                    onClick={() => { setThemeMode('light'); setIsThemeMenuOpen(false); }}
-                    className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'light' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
+                    aria-label="Светлая тема"
+                    title="Светлая"
+                    aria-pressed={themeMode === 'light'}
+                    onClick={() => { setThemeMode('light'); setIsThemeMenuOpen(false); window.requestAnimationFrame(() => themeTriggerRef.current?.focus()); }}
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${themeMode === 'light' ? 'bg-gradient-to-br from-mint/25 via-white/80 to-indigo-400/20 text-neutral-800 ring-1 ring-indigo-300/40 shadow-[0_2px_10px_rgba(99,102,241,0.08)] dark:from-mint/15 dark:via-white/[0.05] dark:to-indigo-400/20 dark:text-white dark:ring-indigo-300/20' : 'text-neutral-500 hover:bg-neutral-100/80 dark:text-neutral-300 dark:hover:bg-white/10'}`}
                   >
-                    <Sun className="h-5 w-5 shrink-0" />
-                    <span>Светлая</span>
+                    <Sun className="h-[18px] w-[18px]" />
                   </button>
                   <button
+                    ref={themeMode === 'dark' ? activeThemeOptionRef : null}
                     type="button"
-                    role="menuitemradio"
-                    aria-checked={themeMode === 'dark'}
-                    onClick={() => { setThemeMode('dark'); setIsThemeMenuOpen(false); }}
-                    className={`flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${themeMode === 'dark' ? 'bg-neutral-100 text-neutral-950 dark:bg-white/10 dark:text-white' : 'text-neutral-600 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5'}`}
+                    aria-label="Тёмная тема"
+                    title="Тёмная"
+                    aria-pressed={themeMode === 'dark'}
+                    onClick={() => { setThemeMode('dark'); setIsThemeMenuOpen(false); window.requestAnimationFrame(() => themeTriggerRef.current?.focus()); }}
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 ${themeMode === 'dark' ? 'bg-gradient-to-br from-mint/25 via-white/80 to-indigo-400/20 text-neutral-800 ring-1 ring-indigo-300/40 shadow-[0_2px_10px_rgba(99,102,241,0.08)] dark:from-mint/15 dark:via-white/[0.05] dark:to-indigo-400/20 dark:text-white dark:ring-indigo-300/20' : 'text-neutral-500 hover:bg-neutral-100/80 dark:text-neutral-300 dark:hover:bg-white/10'}`}
                   >
-                    <Moon className="h-5 w-5 shrink-0" />
-                    <span>Тёмная</span>
+                    <Moon className="h-[18px] w-[18px]" />
                   </button>
                 </div>
+              ) : (
+                <button
+                  ref={themeTriggerRef}
+                  type="button"
+                  onClick={() => setIsThemeMenuOpen(true)}
+                  className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm transition-transform active:scale-90 gpu focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/60"
+                  aria-label={`Тема оформления: ${themeMode === 'system' ? 'системная' : themeMode === 'light' ? 'светлая' : 'тёмная'}. Открыть выбор темы`}
+                >
+                  {themeMode === 'system' ? (
+                    <Contrast className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
+                  ) : themeMode === 'light' ? (
+                    <Sun className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
+                  ) : (
+                    <Moon className="h-5 w-5 text-neutral-700 dark:text-neutral-200" />
+                  )}
+                </button>
               )}
             </div>
           </div>
@@ -443,6 +470,8 @@ function App() {
         onTabChange={setActiveTab}
         onAddClick={() => setIsSheetOpen(true)}
       />
+        </>
+      )}
 
       {/* Add Transaction Bottom Sheet */}
       <AddTransactionSheet
@@ -478,17 +507,6 @@ function App() {
         onClose={() => setIsBudgetEditOpen(false)}
         currentBudget={monthlyBudget}
         onSave={updateMonthlyBudget}
-      />
-
-      {/* Profile & Settings Sheet */}
-      <ProfileSheet
-        open={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-        userName={userName}
-        initialBalance={initialBalance}
-        onUpdateName={updateName}
-        onUpdateInitialBalance={updateInitialBalance}
-        onResetData={handleResetData}
       />
 
       <StorageRecoveryNotice issues={storageIssues} onDownloadRecovery={handleDownloadRecovery} />
