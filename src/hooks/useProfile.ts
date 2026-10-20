@@ -1,4 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
+import {
+  canPersistReadStatus,
+  readStoredNumber,
+  readStoredString,
+  writeStoredRawValue,
+  type StorageIssue,
+} from '@/storage/safeLocalStorage';
 
 const NAME_KEY = 'fintrack-user-name';
 const BALANCE_KEY = 'fintrack-initial-balance';
@@ -8,86 +15,71 @@ const DEFAULT_NAME = 'Пользователь';
 const DEFAULT_BALANCE = 0;
 const DEFAULT_MONTHLY_BUDGET = 50_000;
 
-function loadName(): string {
-  try {
-    return localStorage.getItem(NAME_KEY) ?? DEFAULT_NAME;
-  } catch {
-    return DEFAULT_NAME;
-  }
-}
-
-function loadBalance(): number {
-  try {
-    const stored = localStorage.getItem(BALANCE_KEY);
-    if (stored !== null) {
-      const parsed = Number(stored);
-      if (Number.isFinite(parsed)) return Math.round(parsed);
-    }
-  } catch {
-    // localStorage may be unavailable; use the default value.
-  }
-
-  return DEFAULT_BALANCE;
-}
-
-function loadMonthlyBudget(): number {
-  try {
-    const stored = localStorage.getItem(MONTHLY_BUDGET_KEY);
-    if (stored !== null) {
-      const parsed = Number(stored);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        return Math.round(parsed);
-      }
-    }
-  } catch {
-    // localStorage may be unavailable; use the default value.
-  }
-
-  return DEFAULT_MONTHLY_BUDGET;
-}
-
 export function useProfile() {
-  const [userName, setUserName] = useState<string>(loadName);
-  const [initialBalance, setInitialBalance] = useState<number>(loadBalance);
-  const [monthlyBudget, setMonthlyBudget] = useState<number>(loadMonthlyBudget);
+  const [nameRecord, setNameRecord] = useState(() => readStoredString(NAME_KEY, DEFAULT_NAME));
+  const [balanceRecord, setBalanceRecord] = useState(() => readStoredNumber(BALANCE_KEY, DEFAULT_BALANCE));
+  const [budgetRecord, setBudgetRecord] = useState(() =>
+    readStoredNumber(MONTHLY_BUDGET_KEY, DEFAULT_MONTHLY_BUDGET, (value) => Number.isFinite(value) && value > 0)
+  );
+  const [writeIssues, setWriteIssues] = useState<StorageIssue[]>([]);
+
+  const userName = nameRecord.value;
+  const initialBalance = balanceRecord.value;
+  const monthlyBudget = budgetRecord.value;
+
+  const updateWriteIssue = useCallback((key: string, issue: StorageIssue | null) => {
+    setWriteIssues((previous) => {
+      const withoutKey = previous.filter((item) => item.key !== key);
+      if (!issue) return withoutKey;
+      const existing = previous.find((item) => item.key === key && item.kind === issue.kind);
+      return existing ? previous : [...withoutKey, issue];
+    });
+  }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(NAME_KEY, userName);
-    } catch {
-      // Ignore storage errors; in-memory state still works.
-    }
-  }, [userName]);
+    if (!canPersistReadStatus(nameRecord.status)) return;
+    updateWriteIssue(NAME_KEY, writeStoredRawValue(NAME_KEY, nameRecord.value));
+  }, [nameRecord.value, nameRecord.status, updateWriteIssue]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(BALANCE_KEY, String(initialBalance));
-    } catch {
-      // Ignore storage errors; in-memory state still works.
-    }
-  }, [initialBalance]);
+    if (!canPersistReadStatus(balanceRecord.status)) return;
+    updateWriteIssue(BALANCE_KEY, writeStoredRawValue(BALANCE_KEY, String(balanceRecord.value)));
+  }, [balanceRecord.value, balanceRecord.status, updateWriteIssue]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(MONTHLY_BUDGET_KEY, String(monthlyBudget));
-    } catch {
-      // Ignore storage errors; in-memory state still works.
-    }
-  }, [monthlyBudget]);
+    if (!canPersistReadStatus(budgetRecord.status)) return;
+    updateWriteIssue(MONTHLY_BUDGET_KEY, writeStoredRawValue(MONTHLY_BUDGET_KEY, String(budgetRecord.value)));
+  }, [budgetRecord.value, budgetRecord.status, updateWriteIssue]);
 
   const updateName = useCallback((name: string) => {
-    setUserName(name.trim() || DEFAULT_NAME);
+    setNameRecord((previous) => {
+      if (!canPersistReadStatus(previous.status)) return previous;
+      return { ...previous, value: name.trim() || DEFAULT_NAME };
+    });
   }, []);
 
   const updateInitialBalance = useCallback((balance: number) => {
     if (!Number.isFinite(balance)) return;
-    setInitialBalance(Math.round(balance));
+    setBalanceRecord((previous) => {
+      if (!canPersistReadStatus(previous.status)) return previous;
+      return { ...previous, value: Math.round(balance) };
+    });
   }, []);
 
   const updateMonthlyBudget = useCallback((budget: number) => {
     if (!Number.isFinite(budget) || budget <= 0) return;
-    setMonthlyBudget(Math.round(budget));
+    setBudgetRecord((previous) => {
+      if (!canPersistReadStatus(previous.status)) return previous;
+      return { ...previous, value: Math.round(budget) };
+    });
   }, []);
+
+  const storageIssues = [
+    nameRecord.issue,
+    balanceRecord.issue,
+    budgetRecord.issue,
+    ...writeIssues,
+  ].filter((issue): issue is StorageIssue => Boolean(issue));
 
   return {
     userName,
@@ -96,5 +88,6 @@ export function useProfile() {
     updateName,
     updateInitialBalance,
     updateMonthlyBudget,
+    storageIssues,
   };
 }

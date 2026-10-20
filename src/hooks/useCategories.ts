@@ -1,4 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import {
+  canPersistReadStatus,
+  readStoredJson,
+  writeStoredJson,
+  type StorageIssue,
+} from '@/storage/safeLocalStorage';
 
 export interface CustomCategory {
   id: string;
@@ -19,28 +25,47 @@ const DEFAULT_CATEGORIES: CustomCategory[] = [
   { id: 'def-5', name: 'Подарки', iconName: 'Gift', isIncome: true, isArchived: false },
 ];
 
-function loadCategories(): CustomCategory[] {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return DEFAULT_CATEGORIES;
+interface StoredCategory {
+  id: string;
+  name: string;
+  iconName: string;
+  isIncome: boolean;
+  isArchived?: boolean;
+}
 
-    const parsed: unknown = JSON.parse(saved);
-    if (!Array.isArray(parsed)) return DEFAULT_CATEGORIES;
+function isStoredCategory(value: unknown): value is StoredCategory {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.id === 'string' &&
+    typeof item.name === 'string' &&
+    typeof item.iconName === 'string' &&
+    typeof item.isIncome === 'boolean' &&
+    (item.isArchived === undefined || typeof item.isArchived === 'boolean')
+  );
+}
 
-    return parsed
-      .filter((item): item is Omit<CustomCategory, 'isArchived'> & { isArchived?: boolean } =>
-        Boolean(
-          item &&
-          typeof item.id === 'string' &&
-          typeof item.name === 'string' &&
-          typeof item.iconName === 'string' &&
-          typeof item.isIncome === 'boolean'
-        )
-      )
-      .map((category) => ({ ...category, isArchived: category.isArchived === true }));
-  } catch {
-    return DEFAULT_CATEGORIES;
+function normalizeStoredCategories(value: unknown): CustomCategory[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const normalized: CustomCategory[] = [];
+  const seenIds = new Set<string>();
+
+  for (const item of value) {
+    if (!isStoredCategory(item)) {
+      return null;
+    }
+
+    if (seenIds.has(item.id)) return null;
+    seenIds.add(item.id);
+    normalized.push({ ...item, isArchived: item.isArchived === true });
   }
+
+  return normalized;
+}
+
+function loadCategories() {
+  return readStoredJson(STORAGE_KEY, DEFAULT_CATEGORIES, normalizeStoredCategories);
 }
 
 function createCategoryId(): string {
@@ -51,15 +76,19 @@ function createCategoryId(): string {
 }
 
 export function useCategories() {
-  const [categories, setCategories] = useState<CustomCategory[]>(loadCategories);
+  const [record, setRecord] = useState(loadCategories);
+  const [writeIssue, setWriteIssue] = useState<StorageIssue | null>(null);
+  const categories = record.value;
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(categories));
-    } catch {
-      // Storage can be unavailable in private browsing or when the quota is full.
-    }
-  }, [categories]);
+    if (!canPersistReadStatus(record.status)) return;
+    const issue = writeStoredJson(STORAGE_KEY, record.value);
+    setWriteIssue((previous) => {
+      if (!issue && !previous) return previous;
+      if (issue && previous?.key === issue.key && previous.kind === issue.kind) return previous;
+      return issue;
+    });
+  }, [record.value, record.status]);
 
   const addCategory = useCallback((name: string, iconName: string, isIncome: boolean) => {
     const trimmedName = name.trim();
@@ -72,20 +101,28 @@ export function useCategories() {
       isIncome,
       isArchived: false,
     };
-    setCategories((prev) => [...prev, newCategory]);
+
+    setRecord((previous) => {
+      if (!canPersistReadStatus(previous.status)) return previous;
+      return { ...previous, value: [...previous.value, newCategory] };
+    });
   }, []);
 
   const updateCategory = useCallback((id: string, name: string, iconName: string) => {
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
-    setCategories((prev) =>
-      prev.map((category) =>
-        category.id === id && !category.isArchived
-          ? { ...category, name: trimmedName, iconName }
-          : category
-      )
-    );
+    setRecord((previous) => {
+      if (!canPersistReadStatus(previous.status)) return previous;
+      return {
+        ...previous,
+        value: previous.value.map((category) =>
+          category.id === id && !category.isArchived
+            ? { ...category, name: trimmedName, iconName }
+            : category
+        ),
+      };
+    });
   }, []);
 
   /**
@@ -93,14 +130,20 @@ export function useCategories() {
    * names and icons remain resolvable in history, but they are no longer selectable.
    */
   const deleteCategory = useCallback((id: string, keepForHistory: boolean) => {
-    setCategories((prev) =>
-      prev.flatMap((category) => {
-        if (category.id !== id) return [category];
-        if (keepForHistory) return [{ ...category, isArchived: true }];
-        return [];
-      })
-    );
+    setRecord((previous) => {
+      if (!canPersistReadStatus(previous.status)) return previous;
+      return {
+        ...previous,
+        value: previous.value.flatMap((category) => {
+          if (category.id !== id) return [category];
+          if (keepForHistory) return [{ ...category, isArchived: true }];
+          return [];
+        }),
+      };
+    });
   }, []);
 
-  return { categories, addCategory, updateCategory, deleteCategory };
+  const storageIssues = [record.issue, writeIssue].filter((issue): issue is StorageIssue => Boolean(issue));
+
+  return { categories, addCategory, updateCategory, deleteCategory, storageIssues };
 }

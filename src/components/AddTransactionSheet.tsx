@@ -257,7 +257,7 @@ export function AddTransactionSheet({
             ? 'translate-y-0 pointer-events-auto opacity-100'
             : 'translate-y-full pointer-events-none opacity-0'
         }`}
-        style={{ height: keyboardOpen ? 'auto' : '75vh', maxHeight: keyboardOpen ? '94dvh' : undefined }}
+        style={{ height: keyboardOpen ? 'auto' : 'min(90dvh, 680px)', maxHeight: '94dvh' }}
       >
         <div className="flex justify-center pt-3 pb-2">
           <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-600" />
@@ -271,7 +271,7 @@ export function AddTransactionSheet({
           <X className="h-4 w-4 text-neutral-500 dark:text-neutral-400" />
         </button>
 
-        <div style={{ height: keyboardOpen ? 'auto' : 'calc(100% - 24px)' }} className={`flex flex-col px-6 ${keyboardOpen ? 'pb-3' : 'pb-8 overflow-hidden'}`}>
+        <div style={{ height: keyboardOpen ? 'auto' : 'calc(100% - 24px)' }} className={`flex min-h-0 flex-col px-6 ${keyboardOpen ? 'pb-3' : 'pb-3 overflow-hidden'}`}>
           {categoryPendingDeletion ? (
             <DeleteConfirmationPanel
               title="Удалить категорию?"
@@ -326,15 +326,16 @@ export function AddTransactionSheet({
                     label="Сумма транзакции в рублях"
                     keyboardId="transaction-amount-keyboard"
                     showCurrency={false}
+                    showZeroPlaceholder
                   />
                 </div>
               </div>
 
-              {!keyboardOpen && <div className="mt-6 min-h-0 flex-1">
-                <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+              {!keyboardOpen && <div className="mt-4 flex min-h-0 flex-1 flex-col">
+                <p className="mb-2 shrink-0 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   Категория
                 </p>
-                <div className="grid grid-cols-3 gap-2.5 max-h-[220px] overflow-y-auto pr-1 no-scrollbar p-1">
+                <div className="grid min-h-0 flex-1 grid-cols-3 content-start gap-2.5 overflow-y-auto pr-1 no-scrollbar p-1">
                   {filteredCategories.map((cat) => {
                     const active = selectedCategoryId === cat.id;
                     return (
@@ -417,7 +418,7 @@ export function AddTransactionSheet({
                   parseInt(amount.replace(/\D/g, ''), 10) <= 0 ||
                   !filteredCategories.some((cat) => cat.id === selectedCategoryId)
                 }
-                className="mt-4 flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-95 gpu disabled:opacity-40"
+                className="mt-3 flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-95 gpu disabled:opacity-40"
               >
                 <Check className="h-4 w-4" strokeWidth={2.5} />
                 Сохранить транзакцию
