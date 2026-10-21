@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import type { CustomCategory } from '@/hooks/useCategories';
+import type { Account } from '@/data/accounts';
 import { IconRenderer } from '@/components/IconRenderer';
 import { DeleteConfirmationPanel } from '@/components/DeleteConfirmationPanel';
 import { ICON_GROUPS } from '@/data/iconsConfig';
@@ -34,6 +35,7 @@ interface AddTransactionSheetProps {
   open: boolean;
   onClose: () => void;
   categories: CustomCategory[];
+  accounts?: Account[];
   onAddCategory: (name: string, iconName: string, isIncome: boolean) => void;
   onUpdateCategory: (id: string, name: string, iconName: string) => void;
   onDeleteCategory: (id: string) => void;
@@ -41,6 +43,7 @@ interface AddTransactionSheetProps {
     amount: number;
     categoryId: string;
     isIncome: boolean;
+    accountId?: string | null;
   }) => void;
 }
 
@@ -48,6 +51,7 @@ export function AddTransactionSheet({
   open,
   onClose,
   categories,
+  accounts = [],
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
@@ -57,6 +61,7 @@ export function AddTransactionSheet({
   const [amount, setAmount] = useState('');
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('');
 
   // Состояния для конструктора категорий
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
@@ -96,6 +101,8 @@ export function AddTransactionSheet({
   useEffect(() => {
     if (open) {
       setKeyboardOpen(false);
+      const defaultAcc = accounts.find((a) => !a.isArchived)?.id || accounts[0]?.id || '';
+      setSelectedAccountId(defaultAcc);
       return;
     }
 
@@ -109,7 +116,7 @@ export function AddTransactionSheet({
     setShowIconSelector(false);
     setCategoryError('');
     setCategoryToDeleteId(null);
-  }, [open]);
+  }, [open, accounts]);
 
   // Блокируем прокрутку страницы под открытой нижней панелью.
   useEffect(() => {
@@ -134,6 +141,7 @@ export function AddTransactionSheet({
       amount: parsed,
       categoryId: currentCategory.id,
       isIncome: txType === 'income',
+      accountId: selectedAccountId || undefined,
     });
     setKeyboardOpen(false);
     onClose();
@@ -332,6 +340,30 @@ export function AddTransactionSheet({
               </div>
 
               {!keyboardOpen && <div className="mt-4 flex min-h-0 flex-1 flex-col">
+                {accounts && accounts.filter((a) => !a.isArchived).length > 1 && (
+                  <div className="mb-3 shrink-0">
+                    <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                      Счёт списания / зачисления
+                    </p>
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                      {accounts.filter((a) => !a.isArchived).map((acc) => (
+                        <button
+                          key={acc.id}
+                          type="button"
+                          onClick={() => setSelectedAccountId(acc.id)}
+                          className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium whitespace-nowrap transition-all ${
+                            selectedAccountId === acc.id
+                              ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
+                              : 'neu-inset text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+                          }`}
+                        >
+                          <IconRenderer name={acc.iconName} className="h-3 w-3" />
+                          <span>{acc.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <p className="mb-2 shrink-0 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   Категория
                 </p>

@@ -6,16 +6,26 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:cap": "BUILD_TARGET=capacitor vite build",
+    "test": "vitest run",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "cap:sync": "BUILD_TARGET=capacitor vite build && cap sync android",
+    "cap:open": "cap open android",
+    "cap:build:android": "BUILD_TARGET=capacitor vite build && cap sync android && cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/status-bar": "^8.0.4",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@eslint/js": "^9.9.1",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
@@ -31,6 +41,7 @@
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2",
     "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^2.1.9",
     "workbox-build": "^7.4.1"
   }
 }

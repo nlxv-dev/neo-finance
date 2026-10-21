@@ -3,9 +3,11 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath, URL } from 'node:url';
 
+const isCapacitor = process.env.BUILD_TARGET === 'capacitor' || process.env.CAPACITOR === 'true';
+
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/neo-finance/',
+  base: isCapacitor ? './' : '/neo-finance/',
   plugins: [
     react(),
     VitePWA({
@@ -19,8 +21,8 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/neo-finance/',
-        scope: '/neo-finance/',
+        start_url: isCapacitor ? './' : '/neo-finance/',
+        scope: isCapacitor ? './' : '/neo-finance/',
         icons: [
           {
             src: 'pwa-192x192.png',

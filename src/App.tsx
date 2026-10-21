@@ -23,6 +23,11 @@ import { BudgetEditSheet } from '@/components/BudgetEditSheet';
 import { formatCurrency, getBudgetStatus, type Transaction } from '@/data/mockData';
 import { resolveTransactionDateISO } from '@/data/transactionDates';
 import { StatisticsScreen } from '@/components/StatisticsScreen';
+import { WalletScreen } from '@/components/WalletScreen';
+import { GoalsScreen } from '@/components/GoalsScreen';
+import { useGoals } from '@/hooks/useGoals';
+import { useAccounts } from '@/hooks/useAccounts';
+import { useCapacitor } from '@/hooks/useCapacitor';
 import { StorageRecoveryNotice } from '@/components/StorageRecoveryNotice';
 import { downloadRecoverySnapshot } from '@/storage/safeLocalStorage';
 
@@ -49,6 +54,36 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isBalanceAdjustOpen, setIsBalanceAdjustOpen] = useState(false);
   const [isBudgetEditOpen, setIsBudgetEditOpen] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+
+  const hasOpenModal =
+    isSettingsOpen ||
+    isSheetOpen ||
+    isBalanceAdjustOpen ||
+    isBudgetEditOpen ||
+    selectedTransaction !== null;
+
+  const handleCloseTopModal = useCallback(() => {
+    if (selectedTransaction !== null) {
+      setSelectedTransaction(null);
+    } else if (isSheetOpen) {
+      setIsSheetOpen(false);
+    } else if (isBalanceAdjustOpen) {
+      setIsBalanceAdjustOpen(false);
+    } else if (isBudgetEditOpen) {
+      setIsBudgetEditOpen(false);
+    } else if (isSettingsOpen) {
+      setIsSettingsOpen(false);
+    }
+  }, [selectedTransaction, isSheetOpen, isBalanceAdjustOpen, isBudgetEditOpen, isSettingsOpen]);
+
+  useCapacitor({
+    theme,
+    activeTab,
+    onNavigateHome: () => setActiveTab('home'),
+    hasOpenModal,
+    onCloseTopModal: handleCloseTopModal,
+  });
 
   const {
     userName,
@@ -69,11 +104,19 @@ function App() {
   const hasUnreadableProfileData = profileStorageIssues.some((issue) => issue.kind !== 'write-failed');
   const hasUnreadableCategories = categoryStorageIssues.some((issue) => issue.kind !== 'write-failed');
   const canPersistTransactions = !hasUnreadableProfileData && !hasUnreadableCategories;
-  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+
+  const {
+    accounts,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    storageIssues: accountStorageIssues,
+  } = useAccounts(initialBalance, canPersistTransactions);
 
   const {
     transactions,
     addTransaction,
+    addTransfer,
     updateTransaction,
     deleteTransaction,
     totalIncome,
@@ -82,12 +125,31 @@ function App() {
     storageIssues: transactionStorageIssues,
   } = useTransactions(initialBalance, categories, canPersistTransactions);
 
-  const storageIssues = [...profileStorageIssues, ...categoryStorageIssues, ...transactionStorageIssues];
+  const {
+    goals,
+    addGoal,
+    updateGoal,
+    deleteGoal,
+    depositToGoal,
+    withdrawFromGoal,
+    storageIssues: goalStorageIssues,
+  } = useGoals(canPersistTransactions);
+
+  const storageIssues = [
+    ...profileStorageIssues,
+    ...categoryStorageIssues,
+    ...transactionStorageIssues,
+    ...accountStorageIssues,
+    ...goalStorageIssues,
+  ];
+
   const handleDownloadRecovery = () => {
     downloadRecoverySnapshot(
       {
         transactions,
         categories,
+        accounts,
+        goals,
         profile: { userName, initialBalance, monthlyBudget },
       },
       storageIssues
@@ -103,11 +165,11 @@ function App() {
     [transactions, currentMonthKey]
   );
   const monthlyIncome = currentMonthTransactions.reduce(
-    (sum, transaction) => sum + (transaction.isIncome ? transaction.amount : 0),
+    (sum, transaction) => sum + (transaction.isIncome && !transaction.isTransfer ? transaction.amount : 0),
     0
   );
   const monthlyExpenses = currentMonthTransactions.reduce(
-    (sum, transaction) => sum + (!transaction.isIncome ? transaction.amount : 0),
+    (sum, transaction) => sum + (!transaction.isIncome && !transaction.isTransfer ? transaction.amount : 0),
     0
   );
   const monthlyGrowth = monthlyIncome - monthlyExpenses;
@@ -131,7 +193,7 @@ function App() {
   }, []);
 
   const handleSaveTransaction = useCallback(
-    (data: { amount: number; categoryId: string; isIncome: boolean }) => {
+    (data: { amount: number; categoryId: string; isIncome: boolean; accountId?: string | null }) => {
       addTransaction(data);
     },
     [addTransaction]
@@ -146,7 +208,7 @@ function App() {
   );
 
   const handleUpdateTransaction = useCallback(
-    (id: number, updates: { amount: number; categoryId: string; isIncome: boolean }) => {
+    (id: number, updates: { amount: number; categoryId: string; isIncome: boolean; accountId?: string | null }) => {
       updateTransaction(id, updates);
       const selectedCategory = categories.find((category) => category.id === updates.categoryId);
       setSelectedTransaction((prev) =>
@@ -197,6 +259,8 @@ function App() {
           setThemeMode={setThemeMode}
           transactions={transactions}
           categories={categories}
+          accounts={accounts}
+          goals={goals}
           addCategory={addCategory}
           updateCategory={updateCategory}
           deleteCategory={handleDeleteCategory}
@@ -213,6 +277,28 @@ function App() {
             transactions={transactions}
             categories={categories}
             onSelectTransaction={setSelectedTransaction}
+          />
+        ) : activeTab === 'wallet' ? (
+          <WalletScreen
+            accounts={accounts}
+            transactions={transactions}
+            categories={categories}
+            onAddAccount={addAccount}
+            onUpdateAccount={updateAccount}
+            onDeleteAccount={deleteAccount}
+            onTransfer={addTransfer}
+            onSelectTransaction={setSelectedTransaction}
+            fallbackInitialBalance={initialBalance}
+          />
+        ) : activeTab === 'goals' || activeTab === 'chart' ? (
+          <GoalsScreen
+            goals={goals}
+            accounts={accounts}
+            onAddGoal={addGoal}
+            onUpdateGoal={updateGoal}
+            onDeleteGoal={deleteGoal}
+            onDepositToGoal={depositToGoal}
+            onWithdrawFromGoal={withdrawFromGoal}
           />
         ) : (
           <>
@@ -385,6 +471,7 @@ function App() {
         open={isSheetOpen}
         onClose={() => setIsSheetOpen(false)}
         categories={categories}
+        accounts={accounts}
         onAddCategory={addCategory}
         onUpdateCategory={updateCategory}
         onDeleteCategory={handleDeleteCategory}
@@ -395,6 +482,7 @@ function App() {
       <TransactionDetailSheet
         transaction={selectedTransaction}
         categories={categories}
+        accounts={accounts}
         onClose={() => setSelectedTransaction(null)}
         onUpdate={handleUpdateTransaction}
         onDelete={handleDeleteTransaction}

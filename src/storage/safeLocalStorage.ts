@@ -28,10 +28,12 @@ export type RawStorageReadResult =
 const RECOVERY_KEYS = [
   'fintrack-transactions',
   'neo_finance_categories',
+  'fintrack-accounts',
   'fintrack-user-name',
   'fintrack-initial-balance',
   'fintrack-monthly-budget',
   'fintrack-theme',
+  'fintrack-goals',
 ] as const;
 
 export function readRawStorageValue(key: string): RawStorageReadResult {

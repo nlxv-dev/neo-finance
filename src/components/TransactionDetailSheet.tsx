@@ -7,18 +7,26 @@ import {
   ArrowDownRight,
   Check,
 } from 'lucide-react';
+import type { Account } from '@/data/accounts';
 import { formatCurrency, type Transaction } from '@/data/mockData';
 import type { CustomCategory } from '@/hooks/useCategories';
 import { IconRenderer } from '@/components/IconRenderer';
 import { DeleteConfirmationPanel } from '@/components/DeleteConfirmationPanel';
 import { AmountKeyboard, AmountTrigger } from '@/components/AmountKeyboard';
+import { ArrowLeftRight } from 'lucide-react';
 
 type TxType = 'expense' | 'income';
-type TransactionUpdates = { amount: number; categoryId: string; isIncome: boolean };
+type TransactionUpdates = {
+  amount: number;
+  categoryId: string;
+  isIncome: boolean;
+  accountId?: string | null;
+};
 
 interface TransactionDetailSheetProps {
   transaction: Transaction | null;
   categories: CustomCategory[];
+  accounts?: Account[];
   onClose: () => void;
   onUpdate: (id: number, updates: TransactionUpdates) => void;
   onDelete: (id: number) => void;
@@ -27,6 +35,7 @@ interface TransactionDetailSheetProps {
 export function TransactionDetailSheet({
   transaction,
   categories,
+  accounts = [],
   onClose,
   onUpdate,
   onDelete,
@@ -35,6 +44,7 @@ export function TransactionDetailSheet({
   const [mode, setMode] = useState<'view' | 'edit' | 'delete'>('view');
   const [editAmount, setEditAmount] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
+  const [editAccountId, setEditAccountId] = useState<string | null>(null);
   const [editType, setEditType] = useState<TxType>('expense');
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
@@ -43,6 +53,7 @@ export function TransactionDetailSheet({
     setMode('view');
     setEditAmount(String(transaction.amount));
     setEditCategoryId(transaction.categoryId ?? '');
+    setEditAccountId(transaction.accountId ?? null);
     setEditType(transaction.isIncome ? 'income' : 'expense');
     setKeyboardOpen(false);
   }, [transaction]);
@@ -109,6 +120,7 @@ export function TransactionDetailSheet({
       amount: parsed,
       categoryId: selectedCategory.id,
       isIncome: editType === 'income',
+      accountId: editAccountId,
     });
     setKeyboardOpen(false);
     setMode('view');
@@ -151,7 +163,7 @@ export function TransactionDetailSheet({
             ? 'translate-y-0 pointer-events-auto opacity-100'
             : 'translate-y-full pointer-events-none opacity-0'
         }`}
-        style={{ height: mode === 'edit' && keyboardOpen ? 'auto' : '60vh', maxHeight: mode === 'edit' && keyboardOpen ? '94dvh' : undefined }}
+        style={{ height: mode === 'edit' && keyboardOpen ? 'auto' : '64vh', maxHeight: mode === 'edit' && keyboardOpen ? '94dvh' : undefined }}
       >
         <div className="flex justify-center pt-3 pb-2">
           <div className="h-1 w-10 rounded-full bg-neutral-300 dark:bg-neutral-600" />
@@ -171,6 +183,7 @@ export function TransactionDetailSheet({
               transaction={transaction}
               categoryName={categoryName}
               categoryIconName={categoryIconName}
+              accounts={accounts}
               onEdit={startEditing}
               onDelete={() => setMode('delete')}
             />
@@ -182,6 +195,9 @@ export function TransactionDetailSheet({
               setEditAmount={setEditAmount}
               editCategoryId={editCategoryId}
               setEditCategoryId={setEditCategoryId}
+              editAccountId={editAccountId}
+              setEditAccountId={setEditAccountId}
+              accounts={accounts}
               editCategories={editCategories}
               editType={editType}
               onTypeChange={handleEditTypeChange}
@@ -210,56 +226,81 @@ function ViewMode({
   transaction,
   categoryName,
   categoryIconName,
+  accounts = [],
   onEdit,
   onDelete,
 }: {
   transaction: Transaction;
   categoryName: string;
   categoryIconName: string;
+  accounts?: Account[];
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const isTransfer = transaction.isTransfer === true;
+  const sourceAcc = accounts.find((a) => a.id === transaction.accountId);
+  const destAcc = transaction.toAccountId ? accounts.find((a) => a.id === transaction.toAccountId) : null;
+
   return (
     <>
       <h2 className="mt-2 text-lg font-semibold text-neutral-900 dark:text-white">
-        Детали транзакции
+        {isTransfer ? 'Детали перевода' : 'Детали транзакции'}
       </h2>
 
       <div className="mt-5 flex flex-col items-center">
         <div
           className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
-            transaction.isIncome
-              ? 'bg-mint/10 dark:bg-mint/10'
-              : 'bg-neutral-100 dark:bg-neutral-800/50'
+            isTransfer
+              ? 'bg-indigoblue/10 text-indigoblue'
+              : transaction.isIncome
+                ? 'bg-mint/10 text-mint'
+                : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800/50 dark:text-neutral-400'
           }`}
         >
           <IconRenderer
-            name={categoryIconName}
-            className={`h-7 w-7 ${
-              transaction.isIncome ? 'text-mint dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
-            }`}
+            name={isTransfer ? 'ArrowLeftRight' : categoryIconName}
+            className="h-7 w-7"
           />
         </div>
         <p className="mt-3 text-3xl font-light tracking-tight text-neutral-900 dark:text-white tabular-nums">
-          {transaction.isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
+          {!isTransfer && (transaction.isIncome ? '+' : '−')}{formatCurrency(transaction.amount)}
           <span className="ml-1 text-lg text-neutral-400 dark:text-neutral-500">₽</span>
         </p>
         <span
           className={`mt-2 flex items-center gap-1 text-xs font-medium ${
-            transaction.isIncome ? 'text-mint dark:text-mint' : 'text-neutral-400 dark:text-neutral-500'
+            isTransfer
+              ? 'text-indigoblue'
+              : transaction.isIncome
+                ? 'text-mint dark:text-mint'
+                : 'text-neutral-400 dark:text-neutral-500'
           }`}
         >
-          {transaction.isIncome ? (
+          {isTransfer ? (
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+          ) : transaction.isIncome ? (
             <ArrowUpRight className="h-3.5 w-3.5" />
           ) : (
             <ArrowDownRight className="h-3.5 w-3.5" />
           )}
-          {transaction.isIncome ? 'Доход' : 'Расход'}
+          {isTransfer ? 'Перевод между счетами' : transaction.isIncome ? 'Доход' : 'Расход'}
         </span>
       </div>
 
       <div className="mt-5 space-y-2.5">
-        <DetailRow label="Категория" value={categoryName} />
+        {isTransfer ? (
+          <>
+            <DetailRow label="Со счёта" value={sourceAcc?.name ?? 'Счёт списания'} />
+            <DetailRow label="На счёт" value={destAcc?.name ?? 'Счёт зачисления'} />
+            {transaction.title && transaction.title !== 'Перевод' && (
+              <DetailRow label="Комментарий" value={transaction.title} />
+            )}
+          </>
+        ) : (
+          <>
+            <DetailRow label="Категория" value={categoryName} />
+            {sourceAcc && <DetailRow label="Счёт" value={sourceAcc.name} />}
+          </>
+        )}
         <DetailRow label="Дата" value={transaction.date} />
         <DetailRow label="ID" value={`#${transaction.id}`} />
       </div>
@@ -267,20 +308,25 @@ function ViewMode({
       <div className="flex-1" />
 
       <div className="flex gap-2.5">
-        <button
-          onClick={onEdit}
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium text-neutral-700 dark:text-white neu-card-sm transition-all duration-200 active:scale-[0.98] gpu"
-        >
-          <Pencil className="h-4 w-4" />
-          Изменить
-        </button>
+        {!isTransfer && (
+          <button
+            onClick={onEdit}
+            className="flex flex-1 items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium text-neutral-700 dark:text-white neu-card-sm transition-all duration-200 active:scale-[0.98] gpu"
+          >
+            <Pencil className="h-4 w-4" />
+            Изменить
+          </button>
+        )}
         <button
           onClick={onDelete}
-          className="flex items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-medium text-red-500 dark:text-red-400 transition-all duration-200 active:scale-[0.98] gpu"
+          className={`flex items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-medium text-red-500 dark:text-red-400 transition-all duration-200 active:scale-[0.98] gpu ${
+            isTransfer ? 'flex-1' : ''
+          }`}
           style={{ background: 'rgba(239, 68, 68, 0.08)' }}
           aria-label="Удалить"
         >
           <Trash2 className="h-4 w-4" />
+          {isTransfer ? 'Удалить перевод' : ''}
         </button>
       </div>
     </>
@@ -303,6 +349,9 @@ function EditMode({
   setEditAmount,
   editCategoryId,
   setEditCategoryId,
+  editAccountId,
+  setEditAccountId,
+  accounts = [],
   editCategories,
   editType,
   onTypeChange,
@@ -315,6 +364,9 @@ function EditMode({
   setEditAmount: (value: string) => void;
   editCategoryId: string;
   setEditCategoryId: (categoryId: string) => void;
+  editAccountId: string | null;
+  setEditAccountId: (id: string | null) => void;
+  accounts?: Account[];
   editCategories: CustomCategory[];
   editType: TxType;
   onTypeChange: (type: TxType) => void;
@@ -333,7 +385,7 @@ function EditMode({
       </h2>
       {!keyboardOpen && (
         <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
-          Измените тип, сумму и категорию
+          Измените тип, сумму, счёт и категорию
         </p>
       )}
 
@@ -376,43 +428,70 @@ function EditMode({
         </div>
       </div>
 
-      {!keyboardOpen && <div className="mt-5 min-h-0 flex-1">
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-          Категория
-        </p>
-        {editCategories.length === 0 ? (
-          <p className="rounded-xl neu-inset p-3 text-xs text-neutral-400 dark:text-neutral-500">
-            Для этого типа пока нет доступных категорий. Добавьте категорию через форму новой транзакции.
-          </p>
-        ) : (
-          <div className="grid max-h-[150px] grid-cols-3 gap-2 overflow-y-auto no-scrollbar p-1">
-            {editCategories.map((category) => {
-              const active = editCategoryId === category.id;
-              return (
-                <button
-                  key={category.id}
-                  onClick={() => setEditCategoryId(category.id)}
-                  className={`flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-1 py-3 transition-all duration-200 active:scale-95 gpu ${
-                    active ? 'neu-card-sm ring-1 ring-mint/40 dark:ring-mint/30' : 'neu-inset'
-                  }`}
-                >
-                  <IconRenderer
-                    name={category.iconName}
-                    className={`h-5 w-5 ${
-                      active ? 'text-mint dark:text-mint' : 'text-neutral-400 dark:text-neutral-500'
+      {!keyboardOpen && (
+        <div className="mt-4 min-h-0 flex-1 flex flex-col overflow-y-auto no-scrollbar">
+          {accounts && accounts.filter((a) => !a.isArchived).length > 1 && (
+            <div className="mb-3 shrink-0">
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                Счёт
+              </p>
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {accounts.filter((a) => !a.isArchived).map((acc) => (
+                  <button
+                    key={acc.id}
+                    type="button"
+                    onClick={() => setEditAccountId(acc.id)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium whitespace-nowrap transition-all ${
+                      (editAccountId === acc.id || (!editAccountId && acc.id === accounts[0]?.id))
+                        ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900'
+                        : 'neu-inset text-neutral-500 dark:text-neutral-400'
                     }`}
-                  />
-                  <span className={`max-w-full truncate text-[11px] font-medium ${
-                    active ? 'text-neutral-900 dark:text-white' : 'text-neutral-400 dark:text-neutral-500'
-                  }`}>
-                    {category.name}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>}
+                  >
+                    <IconRenderer name={acc.iconName} className="h-3 w-3" />
+                    <span>{acc.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+            Категория
+          </p>
+          {editCategories.length === 0 ? (
+            <p className="rounded-xl neu-inset p-3 text-xs text-neutral-400 dark:text-neutral-500">
+              Для этого типа пока нет доступных категорий. Добавьте категорию через форму новой транзакции.
+            </p>
+          ) : (
+            <div className="grid max-h-[150px] grid-cols-3 gap-2 overflow-y-auto no-scrollbar p-1">
+              {editCategories.map((category) => {
+                const active = editCategoryId === category.id;
+                return (
+                  <button
+                    key={category.id}
+                    onClick={() => setEditCategoryId(category.id)}
+                    className={`flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-1 py-3 transition-all duration-200 active:scale-95 gpu ${
+                      active ? 'neu-card-sm ring-1 ring-mint/40 dark:ring-mint/30' : 'neu-inset'
+                    }`}
+                  >
+                    <IconRenderer
+                      name={category.iconName}
+                      className={`h-5 w-5 ${
+                        active ? 'text-mint dark:text-mint' : 'text-neutral-400 dark:text-neutral-500'
+                      }`}
+                    />
+                    <span className={`max-w-full truncate text-[11px] font-medium ${
+                      active ? 'text-neutral-900 dark:text-white' : 'text-neutral-400 dark:text-neutral-500'
+                    }`}>
+                      {category.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {keyboardOpen && (
         <div className="mt-4 flex min-h-0 flex-col gap-2.5">

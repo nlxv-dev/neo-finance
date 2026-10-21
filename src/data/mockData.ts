@@ -18,7 +18,7 @@ import {
 export interface Transaction {
   id: number;
   title: string;
-  /** Stable category reference. Null is used only for legacy rows that cannot be mapped safely. */
+  /** Stable category reference. Null is used only for legacy rows that cannot be mapped safely or transfers. */
   categoryId: string | null;
   /** Name snapshot used for legacy/orphaned rows and as a safe display fallback. */
   category: string;
@@ -29,6 +29,12 @@ export interface Transaction {
   /** Machine-readable transaction date used by analytics and data migration. */
   dateISO?: string;
   isIncome: boolean;
+  /** Reference to the account where money was deposited or withdrawn. Null indicates default/unassigned. */
+  accountId?: string | null;
+  /** For transfers: the destination account ID. */
+  toAccountId?: string | null;
+  /** Whether this transaction represents an internal transfer between accounts. */
+  isTransfer?: boolean;
 }
 
 export const INITIAL_BALANCE = 0;

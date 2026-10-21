@@ -46,6 +46,9 @@ import {
   type CsvImportMode,
 } from '@/backup/backupService';
 
+import type { Account } from '@/data/accounts';
+import type { Goal } from '@/data/goals';
+
 interface SettingsScreenProps {
   onClose: () => void;
   userName: string;
@@ -57,6 +60,8 @@ interface SettingsScreenProps {
   setThemeMode: (mode: ThemeMode) => void;
   transactions: Transaction[];
   categories: CustomCategory[];
+  accounts?: Account[];
+  goals?: Goal[];
   addCategory: (name: string, iconName: string, isIncome: boolean) => void;
   updateCategory: (id: string, name: string, iconName: string) => void;
   deleteCategory: (id: string) => void;
@@ -242,7 +247,7 @@ function CategoryEditor({
 export function SettingsScreen(props: SettingsScreenProps) {
   const {
     onClose, userName, initialBalance, monthlyBudget, updateName, updateInitialBalance,
-    themeMode, setThemeMode, transactions, categories, addCategory, updateCategory,
+    themeMode, setThemeMode, transactions, categories, accounts = [], goals = [], addCategory, updateCategory,
     deleteCategory, onDownloadRecovery, storageWriteFailed,
   } = props;
   const [page, setPage] = useState<SettingsPage>('root');
@@ -289,6 +294,8 @@ export function SettingsScreen(props: SettingsScreenProps) {
       const exportedAt = downloadJsonBackup({
         transactions,
         categories,
+        accounts,
+        goals,
         profile: { userName, initialBalance, monthlyBudget },
         settings: { themeMode },
       });

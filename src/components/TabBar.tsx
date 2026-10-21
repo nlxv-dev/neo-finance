@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Home, PieChart, Plus, Wallet, BarChart3, type LucideIcon } from 'lucide-react';
+import { Home, PieChart, Plus, Wallet, Target, type LucideIcon } from 'lucide-react';
 
 interface TabItem {
   id: string;
@@ -14,7 +14,7 @@ const leftTabs: TabItem[] = [
 
 const rightTabs: TabItem[] = [
   { id: 'wallet', label: 'Кошелёк', icon: Wallet },
-  { id: 'chart', label: 'Отчёты', icon: BarChart3 },
+  { id: 'goals', label: 'Цели', icon: Target },
 ];
 
 const BAR_HEIGHT = 56; // px — h-14

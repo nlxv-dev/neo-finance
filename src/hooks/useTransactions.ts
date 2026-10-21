@@ -21,6 +21,9 @@ type StoredTransaction = Partial<Transaction> & {
   date?: unknown;
   isIncome?: unknown;
   id?: unknown;
+  accountId?: unknown;
+  toAccountId?: unknown;
+  isTransfer?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -60,12 +63,18 @@ function normalizeStoredTransactions(value: unknown, categories: CustomCategory[
       return null;
     }
 
+    const isTransfer = item.isTransfer === true;
+    const accountId = typeof item.accountId === 'string' && item.accountId ? item.accountId : null;
+    const toAccountId = typeof item.toAccountId === 'string' && item.toAccountId ? item.toAccountId : null;
+
     const categoryName =
       typeof item.category === 'string'
         ? item.category
         : typeof item.title === 'string'
           ? item.title
-          : 'Без категории';
+          : isTransfer
+            ? 'Перевод'
+            : 'Без категории';
 
     const hasCategoryIdField = Object.prototype.hasOwnProperty.call(item, 'categoryId');
     const existingId = typeof item.categoryId === 'string' ? item.categoryId : null;
@@ -73,7 +82,7 @@ function normalizeStoredTransactions(value: unknown, categories: CustomCategory[
 
     if (existingId) {
       linkedCategory = categories.find((category) => category.id === existingId);
-    } else if (!hasCategoryIdField) {
+    } else if (!hasCategoryIdField && !isTransfer) {
       // Legacy entries stored only a name. Migrate only if the match is unambiguous.
       const matches = categories.filter(
         (category) =>
@@ -84,18 +93,22 @@ function normalizeStoredTransactions(value: unknown, categories: CustomCategory[
       if (matches.length === 1) linkedCategory = matches[0];
     }
 
-    const legacyIcon = typeof item.categoryIconName === 'string' ? item.categoryIconName : 'HelpCircle';
+    const legacyIcon = typeof item.categoryIconName === 'string'
+      ? item.categoryIconName
+      : isTransfer
+        ? 'ArrowLeftRight'
+        : 'HelpCircle';
     const safeId = linkedCategory?.id ?? (hasCategoryIdField ? existingId : null);
-    const displayName = linkedCategory?.name ?? categoryName;
-    const iconName = linkedCategory?.iconName ?? legacyIcon;
+    const displayName = isTransfer ? (typeof item.title === 'string' ? item.title : 'Перевод') : (linkedCategory?.name ?? categoryName);
+    const iconName = isTransfer ? 'ArrowLeftRight' : (linkedCategory?.iconName ?? legacyIcon);
 
     normalized.push({
       id: item.id,
-      title: typeof item.title === 'string' ? (linkedCategory?.name ?? item.title) : displayName,
+      title: typeof item.title === 'string' ? (isTransfer ? item.title : (linkedCategory?.name ?? item.title)) : displayName,
       categoryId: safeId,
       category: displayName,
       categoryIconName: iconName,
-      amount: item.amount,
+      amount: Math.round(item.amount),
       date: item.date,
       dateISO: resolveTransactionDateISO({
         id: item.id,
@@ -103,6 +116,9 @@ function normalizeStoredTransactions(value: unknown, categories: CustomCategory[
         dateISO: typeof item.dateISO === 'string' ? item.dateISO : undefined,
       }),
       isIncome: item.isIncome,
+      accountId,
+      toAccountId,
+      isTransfer,
     });
   }
 
@@ -117,6 +133,16 @@ export interface TransactionInput {
   amount: number;
   categoryId: string;
   isIncome: boolean;
+  accountId?: string | null;
+}
+
+export interface TransferInput {
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  fromAccountName?: string;
+  toAccountName?: string;
+  comment?: string;
 }
 
 export function useTransactions(
@@ -152,10 +178,12 @@ export function useTransactions(
       categoryId: selectedCategory.id,
       category: selectedCategory.name,
       categoryIconName: selectedCategory.iconName,
-      amount: input.amount,
+      amount: Math.round(input.amount),
       date: dateStr,
       dateISO: toLocalISODate(now),
       isIncome: input.isIncome,
+      accountId: input.accountId ?? null,
+      isTransfer: false,
     };
 
     setRecord((prev) => {
@@ -163,6 +191,41 @@ export function useTransactions(
       return { ...prev, value: [newTx, ...prev.value] };
     });
   }, [categories, dependenciesHealthy]);
+
+  const addTransfer = useCallback((input: TransferInput) => {
+    if (input.fromAccountId === input.toAccountId) return;
+    if (!Number.isFinite(input.amount) || input.amount <= 0) return;
+
+    const now = new Date();
+    const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+    const dateStr = `${now.getDate()} ${months[now.getMonth()]}`;
+
+    const title = input.comment?.trim()
+      ? input.comment.trim()
+      : input.fromAccountName && input.toAccountName
+        ? `Перевод: ${input.fromAccountName} → ${input.toAccountName}`
+        : 'Перевод между счетами';
+
+    const newTx: Transaction = {
+      id: Date.now(),
+      title,
+      categoryId: null,
+      category: 'Перевод',
+      categoryIconName: 'ArrowLeftRight',
+      amount: Math.round(input.amount),
+      date: dateStr,
+      dateISO: toLocalISODate(now),
+      isIncome: false,
+      accountId: input.fromAccountId,
+      toAccountId: input.toAccountId,
+      isTransfer: true,
+    };
+
+    setRecord((prev) => {
+      if (!dependenciesHealthy || !canPersistReadStatus(prev.status)) return prev;
+      return { ...prev, value: [newTx, ...prev.value] };
+    });
+  }, [dependenciesHealthy]);
 
   const resetTransactions = useCallback(() => {
     setRecord((prev) => {
@@ -179,19 +242,20 @@ export function useTransactions(
         value: prev.value.map((tx) => {
           if (tx.id !== id) return tx;
 
-          const nextCategoryId = updates.categoryId ?? tx.categoryId;
+          const nextCategoryId = updates.categoryId !== undefined ? updates.categoryId : tx.categoryId;
           const selectedCategory = nextCategoryId
             ? categories.find((category) => category.id === nextCategoryId)
             : undefined;
 
           return {
             ...tx,
-            amount: updates.amount ?? tx.amount,
+            amount: updates.amount !== undefined ? Math.round(updates.amount) : tx.amount,
             categoryId: nextCategoryId,
             category: selectedCategory?.name ?? tx.category,
             categoryIconName: selectedCategory?.iconName ?? tx.categoryIconName,
             title: selectedCategory?.name ?? tx.title,
-            isIncome: updates.isIncome ?? tx.isIncome,
+            isIncome: updates.isIncome !== undefined ? updates.isIncome : tx.isIncome,
+            accountId: updates.accountId !== undefined ? updates.accountId : tx.accountId,
           };
         }),
       };
@@ -205,12 +269,13 @@ export function useTransactions(
     });
   }, [dependenciesHealthy]);
 
+  // Income and expenses strictly EXCLUDE transfers
   const totalIncome = transactions
-    .filter((transaction) => transaction.isIncome)
+    .filter((transaction) => !transaction.isTransfer && transaction.isIncome)
     .reduce((sum, transaction) => sum + transaction.amount, 0);
 
   const totalExpenses = transactions
-    .filter((transaction) => !transaction.isIncome)
+    .filter((transaction) => !transaction.isTransfer && !transaction.isIncome)
     .reduce((sum, transaction) => sum + transaction.amount, 0);
 
   const totalBalance = initialBalance + totalIncome - totalExpenses;
@@ -219,6 +284,7 @@ export function useTransactions(
   return {
     transactions,
     addTransaction,
+    addTransfer,
     resetTransactions,
     updateTransaction,
     deleteTransaction,

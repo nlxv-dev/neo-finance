@@ -1,11 +1,15 @@
 import type { Transaction } from '@/data/mockData';
 import type { CustomCategory } from '@/hooks/useCategories';
 import type { ThemeMode } from '@/hooks/useTheme';
+import type { Account, AccountType } from '@/data/accounts';
+import type { Goal } from '@/data/goals';
 
 // These historical browser-storage keys are intentionally preserved until a separate, tested migration exists.
 export const STORAGE_KEYS = {
   transactions: 'fintrack-transactions',
   categories: 'neo_finance_categories',
+  accounts: 'fintrack-accounts',
+  goals: 'fintrack-goals',
   userName: 'fintrack-user-name',
   initialBalance: 'fintrack-initial-balance',
   monthlyBudget: 'fintrack-monthly-budget',
@@ -19,6 +23,8 @@ export const BACKUP_SCHEMA_VERSION = 1;
 export interface BackupData {
   transactions: Transaction[];
   categories: CustomCategory[];
+  accounts?: Account[];
+  goals?: Goal[];
   profile: {
     userName: string;
     initialBalance: number;
@@ -83,6 +89,53 @@ function normalizeCategories(value: unknown): CustomCategory[] {
   });
 }
 
+function normalizeAccounts(value: unknown): Account[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  return value.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`Счёт №${index + 1} имеет неверный формат.`);
+    const id = requireString(entry.id, `id счёта №${index + 1}`);
+    if (ids.has(id)) throw new Error(`В резервной копии повторяется ID счёта «${id}».`);
+    ids.add(id);
+    const safeType: AccountType = ['card', 'cash', 'bank', 'savings', 'other'].includes(entry.type as string)
+      ? (entry.type as AccountType)
+      : 'card';
+    return {
+      id,
+      name: requireString(entry.name, `название счёта №${index + 1}`),
+      type: safeType,
+      iconName: requireString(entry.iconName, `иконка счёта №${index + 1}`),
+      currency: typeof entry.currency === 'string' && entry.currency ? entry.currency : 'RUB',
+      initialBalance: requireFiniteNumber(entry.initialBalance, `начальный баланс счёта №${index + 1}`),
+      isArchived: entry.isArchived === true,
+      color: typeof entry.color === 'string' ? entry.color : undefined,
+    };
+  });
+}
+
+function normalizeGoals(value: unknown): Goal[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  return value.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`Цель №${index + 1} имеет неверный формат.`);
+    const id = requireString(entry.id, `id цели №${index + 1}`);
+    if (ids.has(id)) throw new Error(`В резервной копии повторяется ID цели «${id}».`);
+    ids.add(id);
+    return {
+      id,
+      name: requireString(entry.name, `название цели №${index + 1}`),
+      targetAmount: requireFiniteNumber(entry.targetAmount, `целевая сумма цели №${index + 1}`, { positive: true }),
+      currentAmount: requireFiniteNumber(entry.currentAmount, `текущая сумма цели №${index + 1}`, { nonNegative: true }),
+      iconName: requireString(entry.iconName, `иконка цели №${index + 1}`),
+      color: typeof entry.color === 'string' && entry.color ? entry.color : '#10b981',
+      deadline: typeof entry.deadline === 'string' && entry.deadline ? entry.deadline : undefined,
+      accountId: typeof entry.accountId === 'string' && entry.accountId ? entry.accountId : undefined,
+      createdAt: typeof entry.createdAt === 'string' && entry.createdAt ? entry.createdAt : new Date().toISOString(),
+      isCompleted: entry.isCompleted === true,
+    };
+  });
+}
+
 function normalizeTransactions(value: unknown): Transaction[] {
   if (!Array.isArray(value)) throw new Error('В резервной копии отсутствует история транзакций.');
   const ids = new Set<number>();
@@ -102,7 +155,24 @@ function normalizeTransactions(value: unknown): Transaction[] {
       : 'HelpCircle';
     const date = requireString(entry.date, `дата транзакции №${index + 1}`, true);
     const dateISO = typeof entry.dateISO === 'string' && entry.dateISO ? entry.dateISO : undefined;
-    return { id, title, categoryId, category, categoryIconName, amount, date, ...(dateISO ? { dateISO } : {}), isIncome: entry.isIncome };
+    const accountId = typeof entry.accountId === 'string' && entry.accountId ? entry.accountId : null;
+    const toAccountId = typeof entry.toAccountId === 'string' && entry.toAccountId ? entry.toAccountId : null;
+    const isTransfer = entry.isTransfer === true;
+
+    return {
+      id,
+      title,
+      categoryId,
+      category,
+      categoryIconName,
+      amount,
+      date,
+      ...(dateISO ? { dateISO } : {}),
+      isIncome: entry.isIncome,
+      ...(accountId ? { accountId } : {}),
+      ...(toAccountId ? { toAccountId } : {}),
+      ...(isTransfer ? { isTransfer: true } : {}),
+    };
   });
 }
 
@@ -121,6 +191,9 @@ export function validateBackupFile(value: unknown): BackupFile {
     throw new Error('В резервной копии указана неизвестная тема оформления.');
   }
 
+  const accounts = Array.isArray(data.accounts) ? normalizeAccounts(data.accounts) : undefined;
+  const goals = Array.isArray(data.goals) ? normalizeGoals(data.goals) : undefined;
+
   return {
     format: BACKUP_FORMAT,
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -129,6 +202,8 @@ export function validateBackupFile(value: unknown): BackupFile {
     data: {
       transactions: normalizeTransactions(data.transactions),
       categories: normalizeCategories(data.categories),
+      ...(accounts ? { accounts } : {}),
+      ...(goals ? { goals } : {}),
       profile: {
         userName: requireString(data.profile.userName, 'имя профиля', true) || 'Пользователь',
         initialBalance: requireFiniteNumber(data.profile.initialBalance, 'начальный баланс', { nonNegative: true }),
@@ -353,14 +428,21 @@ function writeStorageAtomically(entries: Array<[string, string]>): void {
 export function restoreJsonBackupToStorage(input: unknown): void {
   const backup = validateBackupFile(input);
   const data = backup.data;
-  writeStorageAtomically([
+  const entries: Array<[string, string]> = [
     [STORAGE_KEYS.transactions, JSON.stringify(data.transactions)],
     [STORAGE_KEYS.categories, JSON.stringify(data.categories)],
     [STORAGE_KEYS.userName, data.profile.userName],
     [STORAGE_KEYS.initialBalance, String(data.profile.initialBalance)],
     [STORAGE_KEYS.monthlyBudget, String(data.profile.monthlyBudget)],
     [STORAGE_KEYS.theme, data.settings.themeMode],
-  ]);
+  ];
+  if (data.accounts && data.accounts.length > 0) {
+    entries.push([STORAGE_KEYS.accounts, JSON.stringify(data.accounts)]);
+  }
+  if (data.goals && data.goals.length > 0) {
+    entries.push([STORAGE_KEYS.goals, JSON.stringify(data.goals)]);
+  }
+  writeStorageAtomically(entries);
 }
 
 function createImportCategories(imported: Transaction[], existing: CustomCategory[]): { transactions: Transaction[]; categories: CustomCategory[] } {
