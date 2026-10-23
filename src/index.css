@@ -1,0 +1,179 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  /* ===== Global seamless mesh (Light theme) ===== */
+  html,
+  body,
+  #root {
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0;
+    overscroll-behavior: none;
+
+    background:
+      radial-gradient(circle 700px at 15% 20%, rgb(74 222 128 / 0.14), transparent 85%),
+      radial-gradient(circle 600px at 85% 40%, rgb(99 102 241 / 0.12), transparent 80%),
+      radial-gradient(circle 700px at 50% 85%, rgb(5 217 164 / 0.08), transparent 85%),
+      #f8f9fa;
+
+    background-attachment: fixed;
+    transition: background 0.3s ease;
+  }
+
+  /* ===== Global seamless mesh (Dark theme) ===== */
+  html.dark,
+  html.dark body,
+  html.dark #root {
+    background:
+      radial-gradient(circle 800px at 10% 15%, rgb(5 217 164 / 0.07), transparent 85%),
+      radial-gradient(circle 700px at 90% 45%, rgb(99 102 241 / 0.09), transparent 80%),
+      radial-gradient(circle 800px at 40% 85%, rgb(59 130 246 / 0.05), transparent 85%),
+      #0d0d10;
+
+    background-attachment: fixed;
+  }
+
+  /* AMOLED keeps a truly black canvas. */
+  html.dark.amoled,
+  html.dark.amoled body,
+  html.dark.amoled #root {
+    background: #000000;
+  }
+}
+
+@layer components {
+  /* ===== Neumorphic Card (Light Mode) ===== */
+  .neu-card {
+    background: #ffffff;
+    box-shadow:
+      -6px -6px 14px rgba(255, 255, 255, 0.95),
+      6px 6px 14px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.02);
+  }
+
+  .neu-card-sm {
+    background: #ffffff;
+    box-shadow:
+      -4px -4px 10px rgba(255, 255, 255, 0.9),
+      4px 4px 10px rgba(0, 0, 0, 0.04);
+  }
+
+  .neu-inset {
+    background: #f5f5f7;
+    box-shadow:
+      inset -3px -3px 7px rgba(255, 255, 255, 0.9),
+      inset 3px 3px 7px rgba(0, 0, 0, 0.04);
+  }
+
+  /* ===== Dark Mode Card ===== */
+  .dark .neu-card {
+    background: #121214;
+    box-shadow: none;
+    border: 0.5px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .dark .neu-card-sm {
+    background: #121214;
+    box-shadow: none;
+    border: 0.5px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .dark .neu-inset {
+    background: #0a0a0c;
+    box-shadow:
+      inset 0 1px 3px rgba(0, 0, 0, 0.6),
+      inset 0 -1px 1px rgba(255, 255, 255, 0.03);
+    border: 0.5px solid rgba(255, 255, 255, 0.04);
+  }
+
+  /* ===== Frosted Glass Tab Bar ===== */
+  /*
+   * Light mode: semi-transparent white + blur so content bleeds through.
+   * Dark mode: near-invisible white tint + same blur.
+   * NO solid color fallbacks — glassmorphism only.
+   */
+  .glass-bar {
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    background: rgba(255, 255, 255, 0.72);
+    border: 0.5px solid rgba(255, 255, 255, 0.9);
+    box-shadow:
+      0 2px 24px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+
+  .dark .glass-bar {
+    background: rgba(255, 255, 255, 0.05);
+    border: 0.5px solid rgba(255, 255, 255, 0.10);
+    box-shadow:
+      0 2px 24px rgba(0, 0, 0, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* ===== Tab Bar center "+" button — dark mode override ===== */
+  .dark .plus-btn {
+    background: rgba(255, 255, 255, 0.07) !important;
+    box-shadow:
+      inset 0 1px 1px rgba(255, 255, 255, 0.15),
+      inset 0 -2px 4px rgba(0, 0, 0, 0.35),
+      0 6px 16px rgba(0, 0, 0, 0.35) !important;
+    border: 0.5px solid rgba(255, 255, 255, 0.12) !important;
+  }
+
+  /* ===== Bottom Sheet Glass ===== */
+  .sheet-glass {
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    background: rgba(255, 255, 255, 0.92);
+    border-top: 0.5px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.08);
+  }
+
+  .dark .sheet-glass {
+    background: rgba(18, 18, 20, 0.85);
+    border-top: 0.5px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  /* ===== Custom Scrollbar ===== */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer utilities {
+  .gpu {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  .gradient-text {
+    background: linear-gradient(135deg, #4ade80, #6366f1);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
