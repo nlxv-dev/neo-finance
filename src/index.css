@@ -9,6 +9,14 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Interactive controls must not select text, matching native OS controls. */
+  button,
+  [role="button"] {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+  }
+
   html {
     font-family: 'Inter', system-ui, sans-serif;
     color-scheme: light;

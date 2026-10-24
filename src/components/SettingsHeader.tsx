@@ -1,0 +1,39 @@
+interface SettingsHeaderProps {
+  title: string;
+  onBack: () => void;
+}
+
+export function SettingsHeader({ title, onBack }: SettingsHeaderProps) {
+  return (
+    <header className="sticky top-0 z-50 w-full bg-transparent px-4 py-4 flex items-center justify-start select-none">
+      <div className="-ml-4 flex min-w-0 flex-1 items-center">
+        <button
+          type="button"
+          aria-label="Назад"
+          onClick={onBack}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl neu-card-sm active:scale-95 transition-all"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="lucide lucide-arrow-left h-5 w-5 text-neutral-700 dark:text-neutral-200"
+          >
+            <path d="m12 19-7-7 7-7"></path>
+            <path d="M19 12H5"></path>
+          </svg>
+        </button>
+
+        <h1 className="ml-4 flex h-10 items-center text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
+          {title}
+        </h1>
+      </div>
+    </header>
+  );
+}

@@ -2,12 +2,11 @@ import { useMemo, useState, type PointerEvent } from 'react';
 import {
   ArrowDownRight,
   ArrowUpRight,
-  CalendarDays,
-  ChevronLeft,
   ChevronRight,
   HelpCircle,
 } from 'lucide-react';
 import { IconRenderer } from '@/components/IconRenderer';
+import { MonthPicker } from '@/components/MonthPicker';
 import { formatCurrency, type Transaction } from '@/data/mockData';
 import { formatISODateShort, resolveTransactionDateISO } from '@/data/transactionDates';
 import type { CustomCategory } from '@/hooks/useCategories';
@@ -270,29 +269,12 @@ export function StatisticsScreen({
           <h1 className="text-lg font-semibold tracking-tight text-neutral-900 dark:text-white">
             Статистика
           </h1>
-          <div className="flex items-center gap-1 rounded-full bg-neutral-100/90 p-1 dark:bg-neutral-800/70">
-            <button
-              type="button"
-              onClick={() => moveMonth(-1)}
-              className="flex h-8 w-6 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-white/80 active:scale-90 dark:text-neutral-400 dark:hover:bg-neutral-700"
-              aria-label="Предыдущий месяц"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div className="flex min-w-[96px] items-center justify-center gap-1 px-0.5 text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
-              <CalendarDays className="h-3.5 w-3.5" />
-              <span>{monthLabel}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => moveMonth(1)}
-              disabled={isCurrentMonth}
-              className="flex h-8 w-6 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-white/80 active:scale-90 disabled:opacity-25 dark:text-neutral-400 dark:hover:bg-neutral-700"
-              aria-label="Следующий месяц"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <MonthPicker
+            label={monthLabel}
+            onPrevious={() => moveMonth(-1)}
+            onNext={() => moveMonth(1)}
+            canGoNext={!isCurrentMonth}
+          />
         </div>
 
         <div className="mt-5 grid grid-cols-3 gap-1 rounded-full bg-neutral-100/80 p-1 dark:bg-neutral-800/70">
