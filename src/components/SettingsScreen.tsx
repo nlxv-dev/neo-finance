@@ -69,6 +69,15 @@ interface SettingsScreenProps {
 
 type SettingsPage = 'root' | 'profile' | 'appearance' | 'language' | 'data' | 'categories' | 'about';
 
+const CHILD_PAGE_TITLES: Record<Exclude<SettingsPage, 'root'>, string> = {
+  profile: 'Профиль',
+  appearance: 'Оформление',
+  language: 'Язык',
+  data: 'Данные и бэкап',
+  categories: 'Категории',
+  about: 'О Neo Finance',
+};
+
 const ICON_GROUP_NAMES = Object.keys(ICON_GROUPS) as Array<keyof typeof ICON_GROUPS>;
 
 function SectionLabel({ children }: { children: string }) {
@@ -388,9 +397,14 @@ export function SettingsScreen(props: SettingsScreenProps) {
     ? dateTimeFormatter.format(parsedBackupDate)
     : 'Ещё не создавалась';
 
+  const childPageTitle = page === 'root' ? null : CHILD_PAGE_TITLES[page];
+
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-transparent text-neutral-900 dark:text-white">
-      <div className="mx-auto min-h-full max-w-md px-5 pb-[calc(env(safe-area-inset-bottom)_+_32px)] pt-[calc(env(safe-area-inset-top)_+_12px)]">
+      <div className="mx-auto min-h-full max-w-md pb-[calc(env(safe-area-inset-bottom)_+_32px)] pt-[calc(env(safe-area-inset-top)_+_12px)]">
+        {childPageTitle && <SettingsHeader title={childPageTitle} onBack={backToRoot} />}
+
+        <main className="flex w-full flex-col px-4 pt-2">
         {page === 'root' && (
           <>
             <header className="flex items-center gap-3 pb-2 pt-2">
@@ -436,7 +450,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
         {page === 'profile' && (
           <>
-            <SettingsHeader title="Профиль" onBack={backToRoot} />
             <p className="mb-5 text-sm leading-6 text-neutral-500 dark:text-neutral-400">Имя и начальный баланс используются на главном экране и в расчёте общего баланса.</p>
             <div className="space-y-5">
               <div>
@@ -464,7 +477,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
         {page === 'appearance' && (
           <>
-            <SettingsHeader title="Оформление" onBack={backToRoot} />
             <p className="mb-5 text-sm leading-6 text-neutral-500 dark:text-neutral-400">Выберите, как Neo Finance должен выглядеть на вашем устройстве.</p>
             <SectionLabel>Тема</SectionLabel>
             <SettingsCard>
@@ -494,7 +506,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
         {page === 'language' && (
           <>
-            <SettingsHeader title="Язык" onBack={backToRoot} />
             <p className="mb-5 text-sm leading-6 text-neutral-500 dark:text-neutral-400">Язык приложения будет переключаться здесь после завершения локализации всех экранов и сообщений.</p>
             <SectionLabel>Доступный язык</SectionLabel>
             <SettingsCard>
@@ -513,7 +524,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
         {page === 'data' && (
           <>
-            <SettingsHeader title="Данные и бэкап" onBack={backToRoot} />
             <div className="rounded-3xl neu-card p-4">
               <div className="flex items-start gap-3">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-mint/15 text-emerald-600 dark:text-mint"><ShieldCheck className="h-5 w-5" /></span>
@@ -552,7 +562,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
         {page === 'categories' && (
           <>
-            <SettingsHeader title="Категории" onBack={backToRoot} />
             {editorCategoryId === null ? (
               <>
                 <p className="mb-5 text-sm leading-6 text-neutral-500 dark:text-neutral-400">Категории используются в форме транзакций. При удалении используемая категория архивируется, а старые записи сохраняются.</p>
@@ -609,7 +618,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
         {page === 'about' && (
           <>
-            <SettingsHeader title="О Neo Finance" onBack={backToRoot} />
             <div className="rounded-3xl neu-card p-5 text-center">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-mint/30 to-indigo-400/25"><Wallet className="h-8 w-8 text-neutral-800 dark:text-white" /></div>
               <h2 className="mt-4 text-xl font-semibold tracking-tight">Neo Finance</h2>
@@ -624,6 +632,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
             <p className="mt-5 px-1 text-xs leading-5 text-neutral-400 dark:text-neutral-500">Neo Finance — независимый проект. Регулярно сохраняйте JSON-копию и храните её в безопасном месте.</p>
           </>
         )}
+        </main>
       </div>
 
       {(pendingBackup || pendingCsvTransactions || deleteTarget) && (
