@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/neo-finance/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta id="theme-color" name="theme-color" content="#ffffff" />
+    <script>
+      (() => {
+        const storageKey = 'fintrack-theme';
+        const backgroundStorageKey = 'fintrack-background-style';
+        let mode = 'light';
+        let backgroundStyle = 'gradient';
+
+        try {
+          const savedMode = localStorage.getItem(storageKey);
+          if (savedMode === 'system' || savedMode === 'light' || savedMode === 'dark') {
+            mode = savedMode;
+          }
+
+          const savedBackgroundStyle = localStorage.getItem(backgroundStorageKey);
+          if (savedBackgroundStyle === 'gradient' || savedBackgroundStyle === 'solid') {
+            backgroundStyle = savedBackgroundStyle;
+          }
+        } catch {
+          // Use the light theme and gradient background if local storage is unavailable.
+        }
+
+        const prefersDark =
+          typeof window.matchMedia === 'function' &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = mode === 'system' ? (prefersDark ? 'dark' : 'light') : mode;
+        const root = document.documentElement;
+
+        root.classList.toggle('dark', theme === 'dark');
+        root.dataset.themeMode = mode;
+        root.dataset.theme = theme;
+        root.dataset.backgroundStyle = backgroundStyle;
+        root.style.colorScheme = theme;
+
+        const themeColor = document.getElementById('theme-color');
+        if (themeColor) themeColor.setAttribute('content', theme === 'dark' ? '#000000' : '#ffffff');
+      })();
+    </script>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="NeoFinance" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="apple-touch-icon" href="/neo-finance/apple-touch-icon.png" />
+    <title>Neo Finance</title>
+    <meta property="og:title" content="Neo Finance" />
+    <meta property="og:description" content="Personal local-first financial management tool" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Neo Finance" />
+    <meta name="twitter:description" content="Personal local-first financial management tool" />
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
