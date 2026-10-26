@@ -1,44 +1,55 @@
-import { ChevronRight, Minus, TrendingDown, TrendingUp } from 'lucide-react';
-import { AnimatedCounter } from '@/components/AnimatedCounter';
+import { ChevronRight } from 'lucide-react';
 import { BudgetIndicator } from '@/components/ui/BudgetIndicator';
 import { TransactionList } from '@/components/TransactionList';
-import { formatCurrency, type Transaction } from '@/data/mockData';
+import { BalanceCardCarousel } from '@/components/BalanceCardCarousel';
+import type { Transaction } from '@/data/mockData';
 import type { CustomCategory } from '@/hooks/useCategories';
+import type { Account } from '@/data/accounts';
 
 interface HomeScreenProps {
   userName: string;
-  totalBalance: number;
-  monthlyGrowth: number;
   monthLabel: string;
+  currentMonthKey: string;
   monthlyExpenses: number;
   monthlyBudget: number;
   safeToSpend: number;
   transactions: Transaction[];
+  accounts: Account[];
+  accountBalances: Record<string, number>;
+  activeCardKey: string;
+  canWriteAccounts: boolean;
   categories: CustomCategory[];
   onOpenSettings: () => void;
-  onOpenBalance: () => void;
+  onSelectCard: (key: string) => void;
+  onOpenBalance: (accountId: string) => void;
+  onAddAccount: () => void;
   onOpenBudget: () => void;
   onSelectTransaction: (transaction: Transaction) => void;
 }
 
 export function HomeScreen({
   userName,
-  totalBalance,
-  monthlyGrowth,
   monthLabel,
+  currentMonthKey,
   monthlyExpenses,
   monthlyBudget,
   safeToSpend,
   transactions,
+  accounts,
+  accountBalances,
+  activeCardKey,
+  canWriteAccounts,
   categories,
   onOpenSettings,
+  onSelectCard,
   onOpenBalance,
+  onAddAccount,
   onOpenBudget,
   onSelectTransaction,
 }: HomeScreenProps) {
   return (
     <>
-      <header className="relative px-5 pb-5 pt-[calc(env(safe-area-inset-top)_+_3rem)]">
+      <header className="relative px-5 pb-3 pt-[calc(env(safe-area-inset-top)_+_3rem)]">
         <div className="relative z-30 flex items-center">
           <button
             type="button"
@@ -64,57 +75,18 @@ export function HomeScreen({
           </button>
         </div>
 
-        <div className="relative z-10 mt-8 animate-fade-in-up">
-          <p className="text-xs font-medium uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
-            Общий баланс
-          </p>
-
-          <h1 className="mt-1.5 font-light tracking-tight text-5xl text-neutral-900 dark:text-white">
-            <button
-              type="button"
-              onClick={onOpenBalance}
-              className="inline-flex items-end rounded-lg transition-opacity hover:opacity-80 active:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/60 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-900"
-              aria-label={`Изменить общий баланс: ${formatCurrency(totalBalance)} рублей`}
-            >
-              <span className="inline-flex items-end">
-                <AnimatedCounter value={totalBalance} />
-                <span className="ml-1.5 pb-1 text-2xl text-neutral-400 dark:text-neutral-500">
-                  ₽
-                </span>
-              </span>
-            </button>
-          </h1>
-
-          <div
-            className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 ${
-              monthlyGrowth > 0
-                ? 'bg-mint/10 dark:bg-mint/10'
-                : monthlyGrowth < 0
-                  ? 'bg-red-500/10 dark:bg-red-500/10'
-                  : 'bg-neutral-100 dark:bg-neutral-800/50'
-            }`}
-          >
-            {monthlyGrowth > 0 ? (
-              <TrendingUp className="h-3.5 w-3.5 text-mint dark:text-mint" />
-            ) : monthlyGrowth < 0 ? (
-              <TrendingDown className="h-3.5 w-3.5 text-red-500 dark:text-red-400" />
-            ) : (
-              <Minus className="h-3.5 w-3.5 text-neutral-500 dark:text-neutral-400" />
-            )}
-
-            <span
-              className={`text-xs font-medium ${
-                monthlyGrowth > 0
-                  ? 'text-mint dark:text-mint'
-                  : monthlyGrowth < 0
-                    ? 'text-red-500 dark:text-red-400'
-                    : 'text-neutral-500 dark:text-neutral-400'
-              }`}
-            >
-              {monthlyGrowth > 0 ? '+' : ''}
-              {formatCurrency(monthlyGrowth)} ₽ за месяц
-            </span>
-          </div>
+        <div className="relative z-10 mt-7 animate-fade-in-up">
+          <BalanceCardCarousel
+            accounts={accounts}
+            accountBalances={accountBalances}
+            transactions={transactions}
+            currentMonthKey={currentMonthKey}
+            activeCardKey={activeCardKey}
+            canWriteAccounts={canWriteAccounts}
+            onSelectCard={onSelectCard}
+            onEditBalance={onOpenBalance}
+            onAddAccount={onAddAccount}
+          />
         </div>
       </header>
 
@@ -142,6 +114,7 @@ export function HomeScreen({
       <section className="px-5">
         <TransactionList
           transactions={transactions}
+          accounts={accounts}
           categories={categories}
           onSelect={onSelectTransaction}
         />

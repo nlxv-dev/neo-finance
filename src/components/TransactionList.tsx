@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { ArrowDownRight, ArrowLeftRight, ArrowUpRight } from 'lucide-react';
 import { IconRenderer } from '@/components/IconRenderer';
 import { formatCurrency, type Transaction } from '@/data/mockData';
 import type { CustomCategory } from '@/hooks/useCategories';
+import type { Account } from '@/data/accounts';
+import { MAIN_ACCOUNT_ID } from '@/data/accounts';
+import { getCurrencySymbol } from '@/utils/currency';
 
 const PAGE_SIZE = 30;
 const MAX_ANIMATED_ROW = 8;
@@ -12,11 +15,12 @@ type TransactionFilter = 'all' | 'income' | 'expense';
 
 interface TransactionListProps {
   transactions: Transaction[];
+  accounts: Account[];
   categories: CustomCategory[];
   onSelect?: (tx: Transaction) => void;
 }
 
-export function TransactionList({ transactions, categories, onSelect }: TransactionListProps) {
+export function TransactionList({ transactions, accounts, categories, onSelect }: TransactionListProps) {
   const [filter, setFilter] = useState<TransactionFilter>('all');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -24,11 +28,15 @@ export function TransactionList({ transactions, categories, onSelect }: Transact
     () => new Map(categories.map((category) => [category.id, category])),
     [categories]
   );
+  const accountById = useMemo(
+    () => new Map(accounts.map((account) => [account.id, account])),
+    [accounts]
+  );
 
   const filtered = useMemo(
     () => transactions.filter((transaction) => {
-      if (filter === 'income') return transaction.isIncome;
-      if (filter === 'expense') return !transaction.isIncome;
+      if (filter === 'income') return !transaction.isTransfer && transaction.isIncome;
+      if (filter === 'expense') return !transaction.isTransfer && !transaction.isIncome;
       return true;
     }),
     [transactions, filter]
@@ -77,6 +85,8 @@ export function TransactionList({ transactions, categories, onSelect }: Transact
               key={transaction.id}
               transaction={transaction}
               categoryById={categoryById}
+              accountById={accountById}
+              currencySymbol={getCurrencySymbol(accountById.get(transaction.accountId?.trim() || MAIN_ACCOUNT_ID)?.currency ?? 'RUB')}
               index={index}
               onSelect={onSelect}
             />
@@ -109,11 +119,15 @@ export function TransactionList({ transactions, categories, onSelect }: Transact
 function TransactionRow({
   transaction,
   categoryById,
+  accountById,
+  currencySymbol,
   index,
   onSelect,
 }: {
   transaction: Transaction;
   categoryById: Map<string, CustomCategory>;
+  accountById: Map<string, Account>;
+  currencySymbol: string;
   index: number;
   onSelect?: (tx: Transaction) => void;
 }) {
@@ -124,6 +138,9 @@ function TransactionRow({
     : undefined;
   const categoryName = currentCategory?.name ?? transaction.category;
   const categoryIcon = currentCategory?.iconName ?? transaction.categoryIconName ?? 'HelpCircle';
+  const transferSource = accountById.get(transaction.accountId?.trim() || MAIN_ACCOUNT_ID);
+  const transferDestination = transaction.toAccountId ? accountById.get(transaction.toAccountId) : undefined;
+  const displayName = transaction.isTransfer ? 'Перевод между счетами' : categoryName;
 
   return (
     <button
@@ -135,40 +152,50 @@ function TransactionRow({
     >
       <div
         className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-          transaction.isIncome
+          transaction.isTransfer
+            ? 'bg-indigoblue/10 text-indigoblue dark:text-indigo-300'
+            : transaction.isIncome
             ? 'bg-mint/10 dark:bg-mint/10'
             : 'bg-neutral-100 dark:bg-neutral-800/50'
         }`}
       >
-        <IconRenderer
-          name={categoryIcon}
-          className={`h-5 w-5 ${
-            transaction.isIncome ? 'text-mint dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
-          }`}
-        />
+        {transaction.isTransfer ? <ArrowLeftRight className="h-5 w-5" aria-hidden="true" /> : (
+          <IconRenderer
+            name={categoryIcon}
+            className={`h-5 w-5 ${
+              transaction.isIncome ? 'text-green-700 dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
+            }`}
+          />
+        )}
       </div>
 
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-neutral-900 dark:text-white">
-          {categoryName}
+          {displayName}
         </p>
-        <p className="text-[11px] text-neutral-400 dark:text-neutral-500">
-          {transaction.date}
+        <p className="truncate text-[11px] text-neutral-400 dark:text-neutral-500">
+          {transaction.isTransfer
+            ? `${transferSource?.name ?? 'Счёт'} → ${transferDestination?.name ?? 'Счёт'} · ${transaction.date}`
+            : transaction.date}
         </p>
       </div>
 
       <div className="flex flex-col items-end">
         <span
           className={`flex items-center gap-0.5 text-sm font-semibold tabular-nums ${
-            transaction.isIncome ? 'text-mint dark:text-mint' : 'text-neutral-900 dark:text-white'
+            transaction.isTransfer
+              ? 'text-neutral-600 dark:text-neutral-300'
+              : transaction.isIncome ? 'text-green-700 dark:text-mint' : 'text-neutral-900 dark:text-white'
           }`}
         >
-          {transaction.isIncome ? (
+          {transaction.isTransfer ? (
+            <ArrowLeftRight className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : transaction.isIncome ? (
             <ArrowUpRight className="h-3.5 w-3.5" />
           ) : (
             <ArrowDownRight className="h-3.5 w-3.5 text-neutral-400 dark:text-neutral-500" />
           )}
-          {formatCurrency(transaction.amount)} ₽
+          {formatCurrency(transaction.amount)} {currencySymbol}
         </span>
       </div>
     </button>

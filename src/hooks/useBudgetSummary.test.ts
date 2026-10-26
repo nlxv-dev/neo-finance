@@ -49,4 +49,19 @@ describe('useBudgetSummary', () => {
     expect(result.current.safeToSpend).toBe(-10_000);
     expect(result.current.progressWidth).toBe(100);
   });
+
+  it('does not count account transfers as income or expenses', () => {
+    const transactions = [
+      transaction({ id: 1, amount: 1_000, isIncome: true }),
+      transaction({ id: 2, amount: 250, isIncome: false }),
+      transaction({ id: 3, amount: 5_000, isTransfer: true, accountId: 'acc-main', toAccountId: 'acc-cash' }),
+    ];
+
+    const { result } = renderHook(() => useBudgetSummary(transactions, 2_000, '2026-10'));
+
+    expect(result.current.monthlyIncome).toBe(1_000);
+    expect(result.current.monthlyExpenses).toBe(250);
+    expect(result.current.monthlyGrowth).toBe(750);
+    expect(result.current.safeToSpend).toBe(1_750);
+  });
 });

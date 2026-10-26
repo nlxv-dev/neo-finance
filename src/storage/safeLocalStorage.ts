@@ -27,6 +27,8 @@ export type RawStorageReadResult =
 
 const RECOVERY_KEYS = [
   'fintrack-transactions',
+  'fintrack-accounts',
+  'fintrack-goals',
   'neo_finance_categories',
   'fintrack-user-name',
   'fintrack-initial-balance',
@@ -194,7 +196,7 @@ export function downloadRecoverySnapshot(
 ): void {
   const payload = {
     format: 'neo-finance-recovery',
-    schemaVersion: 1,
+    schemaVersion: 3,
     exportedAt: new Date().toISOString(),
     note: 'Recovery snapshot. Raw storage strings are preserved as-is; this is not the regular import-backup format.',
     issues: issues.map(({ key, kind }) => ({ key, kind })),

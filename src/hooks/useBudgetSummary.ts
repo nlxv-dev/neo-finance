@@ -39,6 +39,9 @@ export function useBudgetSummary(
       if (!dateISO?.startsWith(currentMonthKey)) continue;
 
       currentMonthTransactions.push(transaction);
+      // Account-to-account movements change balances, not income, spending,
+      // budget progress or monthly growth.
+      if (transaction.isTransfer) continue;
       if (transaction.isIncome) monthlyIncome += transaction.amount;
       else monthlyExpenses += transaction.amount;
     }

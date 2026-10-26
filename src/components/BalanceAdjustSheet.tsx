@@ -3,11 +3,14 @@ import { Check, Wallet, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react
 import { formatCurrency } from '@/data/mockData';
 import { AmountKeyboard, AmountTrigger } from '@/components/AmountKeyboard';
 import { BottomSheet } from '@/components/ui/BottomSheet';
+import { getCurrencySymbol } from '@/utils/currency';
 
 interface BalanceAdjustSheetProps {
   open: boolean;
   onClose: () => void;
   currentBalance: number;
+  accountName?: string;
+  currency?: string;
   onAdjust: (targetBalance: number) => void;
 }
 
@@ -15,6 +18,8 @@ export function BalanceAdjustSheet({
   open,
   onClose,
   currentBalance,
+  accountName = 'Основной счёт',
+  currency = 'RUB',
   onAdjust,
 }: BalanceAdjustSheetProps) {
   const [isNegative, setIsNegative] = useState(false);
@@ -32,6 +37,7 @@ export function BalanceAdjustSheet({
   const rawAmount = parseInt(digits || '0', 10) || 0;
   const targetAmount = isNegative ? -rawAmount : rawAmount;
   const difference = targetAmount - currentBalance;
+  const currencySymbol = getCurrencySymbol(currency);
 
   const handleSave = () => {
     if (difference === 0) {
@@ -64,7 +70,7 @@ export function BalanceAdjustSheet({
         if (target.closest('[data-amount-trigger], [data-amount-keyboard], button, input, select, textarea')) return;
         setKeyboardOpen(false);
       }}
-      ariaLabel="Корректировка баланса"
+      ariaLabel={`Корректировка баланса: ${accountName}`}
       panelClassName={keyboardOpen ? 'overflow-y-auto' : 'overflow-hidden'}
       panelStyle={{ height: keyboardOpen ? 'auto' : '54vh', maxHeight: keyboardOpen ? '94dvh' : undefined }}
     >
@@ -75,7 +81,7 @@ export function BalanceAdjustSheet({
 
         {!keyboardOpen && (
           <p className="mt-0.5 text-xs text-neutral-400 dark:text-neutral-500">
-            Введите новое значение общего баланса
+            Изменение текущего остатка: {accountName}
           </p>
         )}
 
@@ -99,7 +105,7 @@ export function BalanceAdjustSheet({
               onToggleKeyboard={() => setKeyboardOpen((value) => !value)}
               onOpenKeyboard={() => setKeyboardOpen(true)}
               onCloseKeyboard={() => setKeyboardOpen(false)}
-              label="Новое значение баланса в рублях"
+              label={`Новое значение баланса счёта «${accountName}» в ${currency}`}
               keyboardId="balance-amount-keyboard"
             />
           </div>
@@ -122,7 +128,7 @@ export function BalanceAdjustSheet({
         {!keyboardOpen && (
           <div className="mt-4 flex flex-col items-center">
             <div className="flex items-center gap-1.5 text-xs text-neutral-400 dark:text-neutral-500">
-              <span>Текущий: {formatCurrency(currentBalance)} ₽</span>
+              <span>Текущий: {formatCurrency(currentBalance)} {currencySymbol}</span>
             </div>
 
             {difference !== 0 && (
@@ -139,7 +145,7 @@ export function BalanceAdjustSheet({
                   <ArrowDownRight className="h-3.5 w-3.5" />
                 )}
                 {difference > 0 ? '+' : ''}
-                {formatCurrency(difference)} ₽
+                {formatCurrency(difference)} {currencySymbol}
                 <span className="opacity-60">· Корректировка</span>
               </div>
             )}

@@ -17,7 +17,17 @@ export interface Transaction {
   date: string;
   /** Machine-readable transaction date used by analytics and data migration. */
   dateISO?: string;
+  /** Stable account reference. Missing IDs in legacy data are migrated to acc-main. */
+  accountId?: string;
   isIncome: boolean;
+  /** Internal movement between two accounts; never income or expense. */
+  isTransfer?: boolean;
+  /** Destination for internal transfers. accountId is the source account. */
+  toAccountId?: string;
+}
+
+export function isTransferTransaction(transaction: Pick<Transaction, 'isTransfer'>): boolean {
+  return transaction.isTransfer === true;
 }
 
 // Пустой массив для чистого старта при первом запуске

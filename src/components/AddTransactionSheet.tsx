@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 
 import type { CustomCategory } from '@/hooks/useCategories';
+import type { Account } from '@/data/accounts';
+import { MAIN_ACCOUNT_ID } from '@/data/accounts';
 import { IconRenderer } from '@/components/IconRenderer';
 import { DeleteConfirmationPanel } from '@/components/DeleteConfirmationPanel';
 import { ICON_GROUPS } from '@/data/iconsConfig';
@@ -34,6 +36,7 @@ interface AddTransactionSheetProps {
   open: boolean;
   onClose: () => void;
   categories: CustomCategory[];
+  accounts: Account[];
   onAddCategory: (name: string, iconName: string, isIncome: boolean) => void;
   onUpdateCategory: (id: string, name: string, iconName: string) => void;
   onDeleteCategory: (id: string) => void;
@@ -41,6 +44,7 @@ interface AddTransactionSheetProps {
     amount: number;
     categoryId: string;
     isIncome: boolean;
+    accountId: string;
   }) => void;
 }
 
@@ -48,6 +52,7 @@ export function AddTransactionSheet({
   open,
   onClose,
   categories,
+  accounts,
   onAddCategory,
   onUpdateCategory,
   onDeleteCategory,
@@ -57,6 +62,7 @@ export function AddTransactionSheet({
   const [amount, setAmount] = useState('');
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(MAIN_ACCOUNT_ID);
 
   // Состояния для конструктора категорий
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
@@ -96,6 +102,7 @@ export function AddTransactionSheet({
   const resetForm = useCallback(() => {
     setAmount('');
     setKeyboardOpen(false);
+    setSelectedAccountId(accounts.find((account) => account.id === MAIN_ACCOUNT_ID)?.id ?? accounts[0]?.id ?? MAIN_ACCOUNT_ID);
     setTxType('expense');
     setIsCreatingCategory(false);
     setEditingCategoryId(null);
@@ -104,11 +111,15 @@ export function AddTransactionSheet({
     setShowIconSelector(false);
     setCategoryError('');
     setCategoryToDeleteId(null);
-  }, []);
+  }, [accounts]);
 
   useEffect(() => {
-    if (open) setKeyboardOpen(false);
-  }, [open]);
+    if (!open) return;
+    setKeyboardOpen(false);
+    setSelectedAccountId((current) => accounts.some((account) => account.id === current)
+      ? current
+      : (accounts.find((account) => account.id === MAIN_ACCOUNT_ID)?.id ?? accounts[0]?.id ?? MAIN_ACCOUNT_ID));
+  }, [open, accounts]);
 
   const handleSave = () => {
     const parsed = parseInt(amount.replace(/\D/g, ''), 10);
@@ -121,6 +132,7 @@ export function AddTransactionSheet({
       amount: parsed,
       categoryId: currentCategory.id,
       isIncome: txType === 'income',
+      accountId: accounts.some((account) => account.id === selectedAccountId) ? selectedAccountId : MAIN_ACCOUNT_ID,
     });
     setKeyboardOpen(false);
     onClose();
@@ -302,6 +314,31 @@ export function AddTransactionSheet({
                   />
                 </div>
               </div>
+
+              {!keyboardOpen && accounts.length > 1 && (
+                <section className="mt-3 shrink-0">
+                  <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                    Счёт
+                  </p>
+                  <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+                    {accounts.map((account) => {
+                      const selected = selectedAccountId === account.id;
+                      return (
+                        <button
+                          key={account.id}
+                          type="button"
+                          onClick={() => setSelectedAccountId(account.id)}
+                          aria-pressed={selected}
+                          className={`flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors ${selected ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900' : 'neu-inset text-neutral-500 dark:text-neutral-400'}`}
+                        >
+                          <IconRenderer name={account.iconName} className="h-3.5 w-3.5" />
+                          <span className="max-w-[125px] truncate">{account.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
 
               {!keyboardOpen && <div className="mt-4 flex min-h-0 flex-1 flex-col">
                 <p className="mb-2 shrink-0 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">

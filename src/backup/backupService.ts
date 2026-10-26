@@ -1,10 +1,14 @@
 import type { Transaction } from '@/data/mockData';
+import { createDefaultAccounts, MAIN_ACCOUNT_ID, normalizeStoredAccounts, type Account } from '@/data/accounts';
 import type { CustomCategory } from '@/hooks/useCategories';
 import type { BackgroundStyle, ThemeMode } from '@/hooks/useTheme';
+import { normalizeStoredGoals, type Goal } from '@/data/goals';
 
 // These historical browser-storage keys are intentionally preserved until a separate, tested migration exists.
 export const STORAGE_KEYS = {
   transactions: 'fintrack-transactions',
+  accounts: 'fintrack-accounts',
+  goals: 'fintrack-goals',
   categories: 'neo_finance_categories',
   userName: 'fintrack-user-name',
   initialBalance: 'fintrack-initial-balance',
@@ -15,9 +19,11 @@ export const STORAGE_KEYS = {
 
 export const LAST_BACKUP_KEY = 'neo-finance-last-backup';
 export const BACKUP_FORMAT = 'neo-finance-backup';
-export const BACKUP_SCHEMA_VERSION = 1;
+export const BACKUP_SCHEMA_VERSION = 4;
 
 export interface BackupData {
+  accounts: Account[];
+  goals: Goal[];
   transactions: Transaction[];
   categories: CustomCategory[];
   profile: {
@@ -105,15 +111,53 @@ function normalizeTransactions(value: unknown): Transaction[] {
       : 'HelpCircle';
     const date = requireString(entry.date, `дата транзакции №${index + 1}`, true);
     const dateISO = typeof entry.dateISO === 'string' && entry.dateISO ? entry.dateISO : undefined;
-    return { id, title, categoryId, category, categoryIconName, amount, date, ...(dateISO ? { dateISO } : {}), isIncome: entry.isIncome };
+    if (entry.accountId !== undefined && entry.accountId !== null && typeof entry.accountId !== 'string') {
+      throw new Error(`Счёт транзакции №${index + 1} указан неверно.`);
+    }
+    if (entry.isTransfer !== undefined && typeof entry.isTransfer !== 'boolean') {
+      throw new Error(`Тип перевода транзакции №${index + 1} указан неверно.`);
+    }
+    if (entry.toAccountId !== undefined && entry.toAccountId !== null && typeof entry.toAccountId !== 'string') {
+      throw new Error(`Счёт назначения транзакции №${index + 1} указан неверно.`);
+    }
+    const accountId = typeof entry.accountId === 'string' && entry.accountId.trim()
+      ? entry.accountId.trim()
+      : MAIN_ACCOUNT_ID;
+    const isTransfer = entry.isTransfer === true;
+    const toAccountId = typeof entry.toAccountId === 'string' ? entry.toAccountId.trim() : '';
+    if (isTransfer && (!toAccountId || toAccountId === accountId || amount <= 0)) {
+      throw new Error(`Перевод №${id} должен указывать два разных счёта.`);
+    }
+    if (isTransfer && entry.isIncome === true) {
+      throw new Error(`Перевод №${id} не может одновременно считаться доходом.`);
+    }
+    return {
+      id,
+      title,
+      categoryId,
+      category,
+      categoryIconName,
+      amount,
+      date,
+      ...(dateISO ? { dateISO } : {}),
+      accountId,
+      isIncome: isTransfer ? false : entry.isIncome,
+      ...(isTransfer ? { isTransfer: true, toAccountId } : {}),
+    };
   });
 }
 
 export function validateBackupFile(value: unknown): BackupFile {
-  if (!isRecord(value) || value.format !== BACKUP_FORMAT || value.schemaVersion !== BACKUP_SCHEMA_VERSION || !isRecord(value.data)) {
+  if (
+    !isRecord(value) ||
+    value.format !== BACKUP_FORMAT ||
+    (value.schemaVersion !== 1 && value.schemaVersion !== 2 && value.schemaVersion !== 3 && value.schemaVersion !== BACKUP_SCHEMA_VERSION) ||
+    !isRecord(value.data)
+  ) {
     throw new Error('Это не резервная копия Neo Finance поддерживаемого формата. Исходные данные не изменены.');
   }
 
+  const sourceSchemaVersion = value.schemaVersion;
   const data = value.data;
   if (!isRecord(data.profile) || !isRecord(data.settings)) {
     throw new Error('В резервной копии повреждены профиль или настройки. Исходные данные не изменены.');
@@ -124,26 +168,81 @@ export function validateBackupFile(value: unknown): BackupFile {
     throw new Error('В резервной копии указана неизвестная тема оформления.');
   }
 
-  // Existing schema-version-1 backups predate the background preference; keep them restorable.
+  // Existing schema-version-1 backups predate the background preference and accounts.
   const backgroundStyle = data.settings.backgroundStyle ?? 'gradient';
   if (typeof backgroundStyle !== 'string' || !SAFE_BACKGROUND_STYLES.has(backgroundStyle as BackgroundStyle)) {
     throw new Error('В резервной копии указан неизвестный стиль фона.');
   }
 
+  const profile = {
+    userName: requireString(data.profile.userName, 'имя профиля', true) || 'Пользователь',
+    // Negative balances are valid (overdraft/debt), so only finiteness is required.
+    initialBalance: requireFiniteNumber(data.profile.initialBalance, 'начальный баланс'),
+    monthlyBudget: requireFiniteNumber(data.profile.monthlyBudget, 'месячный бюджет', { positive: true }),
+  };
+
+  let transactions = normalizeTransactions(data.transactions);
+  let accounts: Account[];
+
+  if (sourceSchemaVersion < 3 && transactions.some((transaction) => transaction.isTransfer)) {
+    throw new Error('Переводы поддерживаются только в JSON-бэкапе версии 3 или новее. Исходные данные не изменены.');
+  }
+
+  if (sourceSchemaVersion === 1) {
+    // Schema 1 did not reliably preserve account records. Re-home every row into
+    // the legacy main bucket so no transaction is orphaned during upgrade.
+    accounts = createDefaultAccounts(profile.initialBalance);
+    transactions = transactions.map((transaction) => ({ ...transaction, accountId: MAIN_ACCOUNT_ID }));
+  } else {
+    const normalizedAccounts = normalizeStoredAccounts(data.accounts);
+    if (!normalizedAccounts) {
+      throw new Error('В резервной копии отсутствует список счетов или он повреждён. Исходные данные не изменены.');
+    }
+    const mainAccount = normalizedAccounts.find((account) => account.id === MAIN_ACCOUNT_ID);
+    if (!mainAccount || mainAccount.isArchived || mainAccount.currency !== 'RUB') {
+      throw new Error('В резервной копии отсутствует активный основной счёт в RUB. Исходные данные не изменены.');
+    }
+    // The account model is canonical in schema 2; mirror its opening balance to
+    // the historical profile field for older app versions and future compatibility.
+    profile.initialBalance = mainAccount.initialBalance;
+    const accountIds = new Set(normalizedAccounts.map((account) => account.id));
+    const accountById = new Map(normalizedAccounts.map((account) => [account.id, account]));
+    const orphanedTransaction = transactions.find((transaction) => {
+      if (!accountIds.has(transaction.accountId ?? MAIN_ACCOUNT_ID)) return true;
+      if (!transaction.isTransfer) return false;
+      const destination = transaction.toAccountId ? accountById.get(transaction.toAccountId) : undefined;
+      const source = accountById.get(transaction.accountId ?? MAIN_ACCOUNT_ID);
+      return !destination || !source || source.id === destination.id || source.currency.toUpperCase() !== destination.currency.toUpperCase();
+    });
+    if (orphanedTransaction) {
+      throw new Error(`Транзакция №${orphanedTransaction.id} ссылается на неверный счёт или переводит между разными валютами. Исходные данные не изменены.`);
+    }
+    accounts = normalizedAccounts;
+  }
+
+  // Goals were introduced in schema 4. Older backups intentionally restore an
+  // empty goal tracker instead of retaining stale goals from the device.
+  let goals: Goal[] = [];
+  if (sourceSchemaVersion >= 4) {
+    const normalizedGoals = normalizeStoredGoals(data.goals);
+    if (!normalizedGoals) {
+      throw new Error('В резервной копии отсутствует список целей или он повреждён. Исходные данные не изменены.');
+    }
+    goals = normalizedGoals;
+  }
+
   return {
     format: BACKUP_FORMAT,
+    // Every successfully validated legacy backup is normalized to the current schema.
     schemaVersion: BACKUP_SCHEMA_VERSION,
     app: 'Neo Finance',
     exportedAt: typeof value.exportedAt === 'string' ? value.exportedAt : new Date(0).toISOString(),
     data: {
-      transactions: normalizeTransactions(data.transactions),
+      accounts,
+      goals,
+      transactions,
       categories: normalizeCategories(data.categories),
-      profile: {
-        userName: requireString(data.profile.userName, 'имя профиля', true) || 'Пользователь',
-        // Баланс кошелька может быть отрицательным (овердрафт, долг), поэтому требуем только конечное число.
-        initialBalance: requireFiniteNumber(data.profile.initialBalance, 'начальный баланс'),
-        monthlyBudget: requireFiniteNumber(data.profile.monthlyBudget, 'месячный бюджет', { positive: true }),
-      },
+      profile,
       settings: { themeMode: themeMode as ThemeMode, backgroundStyle: backgroundStyle as BackgroundStyle },
     },
   };
@@ -194,7 +293,9 @@ function csvCell(value: string | number): string {
 }
 
 export function createTransactionsCsv(transactions: Transaction[]): string {
-  const rows = [CSV_HEADERS, ...transactions.map((transaction) => [
+  // The stable CSV schema only represents income/expense rows. Transfers remain
+  // losslessly available in JSON backups, where both account endpoints are stored.
+  const rows = [CSV_HEADERS, ...transactions.filter((transaction) => !transaction.isTransfer).map((transaction) => [
     String(transaction.id),
     String(transaction.amount),
     transaction.isIncome ? 'income' : 'expense',
@@ -321,6 +422,7 @@ export function parseTransactionsCsv(source: string): Transaction[] {
       amount,
       date,
       ...(dateISO.trim() ? { dateISO: dateISO.trim() } : {}),
+      accountId: MAIN_ACCOUNT_ID,
       isIncome: typeText === 'income',
     });
   }
@@ -365,6 +467,8 @@ export function restoreJsonBackupToStorage(input: unknown): void {
   const data = backup.data;
   writeStorageAtomically([
     [STORAGE_KEYS.transactions, JSON.stringify(data.transactions)],
+    [STORAGE_KEYS.accounts, JSON.stringify(data.accounts)],
+    [STORAGE_KEYS.goals, JSON.stringify(data.goals)],
     [STORAGE_KEYS.categories, JSON.stringify(data.categories)],
     [STORAGE_KEYS.userName, data.profile.userName],
     [STORAGE_KEYS.initialBalance, String(data.profile.initialBalance)],
@@ -437,7 +541,30 @@ export function importCsvTransactionsToStorage(
   }
 
   const mapped = createImportCategories(sourceTransactions, existingCategories);
-  const transactions = mode === 'replace' ? mapped.transactions : [...mapped.transactions, ...existingTransactions];
+  // The existing CSV columns cannot represent a transfer's destination. A CSV
+  // replace therefore replaces the income/expense history but preserves internal
+  // transfers instead of silently deleting data that was not present in the file.
+  // A CSV from another backup can reuse a transfer's numeric ID, so only a real
+  // collision causes the preserved transfer ID to be reassigned.
+  let transactions: Transaction[];
+  if (mode === 'replace') {
+    const existingTransfers = existingTransactions.filter((transaction) => transaction.isTransfer);
+    let nextAvailableId = Date.now();
+    const usedIds = new Set(mapped.transactions.map((transaction) => transaction.id));
+    const preservedTransfers = existingTransfers.map((transaction) => {
+      let id = transaction.id;
+      if (usedIds.has(id)) {
+        while (usedIds.has(nextAvailableId)) nextAvailableId += 1;
+        id = nextAvailableId;
+        nextAvailableId += 1;
+      }
+      usedIds.add(id);
+      return id === transaction.id ? transaction : { ...transaction, id };
+    });
+    transactions = [...mapped.transactions, ...preservedTransfers];
+  } else {
+    transactions = [...mapped.transactions, ...existingTransactions];
+  }
 
   writeStorageAtomically([
     [STORAGE_KEYS.categories, JSON.stringify(mapped.categories)],

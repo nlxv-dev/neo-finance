@@ -10,6 +10,8 @@ interface StorageRecoveryNoticeProps {
 
 const KEY_LABELS: Record<string, string> = {
   'fintrack-transactions': 'Транзакции',
+  'fintrack-accounts': 'Счета',
+  'fintrack-goals': 'Цели',
   neo_finance_categories: 'Категории',
   'fintrack-user-name': 'Имя профиля',
   'fintrack-initial-balance': 'Начальный баланс',
@@ -98,7 +100,7 @@ export function StorageRecoveryNotice({ issues, onDownloadRecovery }: StorageRec
           {pendingBackup ? (
             <div className="mt-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300"><FileJson className="h-4 w-4" /> Резервная копия проверена</div>
-              <p className="mt-1 text-xs leading-5 text-neutral-600 dark:text-neutral-300">Будут восстановлены {pendingBackup.data.transactions.length} транзакций и {pendingBackup.data.categories.length} категорий, а также профиль, бюджет и настройки оформления. Повреждённые локальные значения будут заменены.</p>
+              <p className="mt-1 text-xs leading-5 text-neutral-600 dark:text-neutral-300">Будут восстановлены {pendingBackup.data.accounts.length} счетов, {pendingBackup.data.goals.length} целей, {pendingBackup.data.transactions.length} транзакций и {pendingBackup.data.categories.length} категорий, а также профиль, бюджет и настройки оформления. Повреждённые локальные значения будут заменены.</p>
               <button type="button" onClick={handleRestore} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-mint to-indigoblue px-3 py-2 text-sm font-semibold text-neutral-950"><Upload className="h-4 w-4" /> Восстановить из JSON</button>
             </div>
           ) : (

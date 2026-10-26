@@ -35,7 +35,9 @@ import { dateTimeFormatter } from '@/utils/formatters';
 import { ICON_GROUPS } from '@/data/iconsConfig';
 import { IconRenderer } from '@/components/IconRenderer';
 import { SettingsHeader } from '@/components/SettingsHeader';
+import type { Account } from '@/data/accounts';
 import type { CustomCategory } from '@/hooks/useCategories';
+import type { Goal } from '@/data/goals';
 import type { BackgroundStyle, ThemeMode } from '@/hooks/useTheme';
 import {
   downloadJsonBackup,
@@ -60,8 +62,10 @@ interface SettingsScreenProps {
   setThemeMode: (mode: ThemeMode) => void;
   backgroundStyle: BackgroundStyle;
   setBackgroundStyle: (style: BackgroundStyle) => void;
+  accounts: Account[];
   transactions: Transaction[];
   categories: CustomCategory[];
+  goals: Goal[];
   addCategory: (name: string, iconName: string, isIncome: boolean) => void;
   updateCategory: (id: string, name: string, iconName: string) => void;
   deleteCategory: (id: string) => void;
@@ -247,7 +251,7 @@ function CategoryEditor({
 export function SettingsScreen(props: SettingsScreenProps) {
   const {
     onClose, userName, initialBalance, monthlyBudget, updateName, updateInitialBalance,
-    themeMode, setThemeMode, backgroundStyle, setBackgroundStyle, transactions, categories, addCategory, updateCategory,
+    themeMode, setThemeMode, backgroundStyle, setBackgroundStyle, accounts, transactions, categories, goals, addCategory, updateCategory,
     deleteCategory, onDownloadRecovery, storageWriteFailed,
   } = props;
   const [page, setPage] = useState<SettingsPage>('root');
@@ -294,8 +298,10 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const handleJsonExport = () => {
     try {
       const exportedAt = downloadJsonBackup({
+        accounts,
         transactions,
         categories,
+        goals,
         profile: { userName, initialBalance, monthlyBudget },
         settings: { themeMode, backgroundStyle },
       });
@@ -309,7 +315,13 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const handleCsvExport = () => {
     try {
       downloadTransactionsCsv(transactions);
-      setMessage({ type: 'info', text: 'CSV-файл с историей транзакций сформирован.' });
+      const transfersExcluded = transactions.filter((transaction) => transaction.isTransfer).length;
+      setMessage({
+        type: 'info',
+        text: transfersExcluded > 0
+          ? `CSV сформирован: в него вошли доходы и расходы. Внутренние переводы (${transfersExcluded}) не включены, поскольку CSV-формат их не описывает; они останутся в приложении и будут включены в JSON-бэкап при его экспорте.`
+          : 'CSV-файл с историей транзакций сформирован.',
+      });
     } catch {
       setMessage({ type: 'error', text: 'Не удалось экспортировать историю в CSV.' });
     }
@@ -562,7 +574,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
             <div className="rounded-3xl neu-card p-4">
               <div className="flex items-start gap-3">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-mint/15 text-emerald-600 dark:text-mint"><ShieldCheck className="h-5 w-5" /></span>
-                <div><h2 className="text-sm font-semibold">Защитите свои финансовые данные</h2><p className="mt-1 text-xs leading-5 text-neutral-500 dark:text-neutral-400">JSON содержит данные для полного восстановления. CSV предназначен для таблиц и переносит историю транзакций.</p></div>
+                <div><h2 className="text-sm font-semibold">Защитите свои финансовые данные</h2><p className="mt-1 text-xs leading-5 text-neutral-500 dark:text-neutral-400">JSON содержит полные данные для восстановления, включая счета и переводы. CSV предназначен для таблиц и переносит доходы и расходы; внутренние переводы в текущем CSV-формате не представлены.</p></div>
               </div>
               <div className="mt-4 border-t border-neutral-100 pt-3 dark:border-white/[0.06]">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">Последняя JSON-копия</p>
@@ -575,13 +587,13 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
             <SectionLabel>Полная резервная копия</SectionLabel>
             <SettingsCard>
-              <SettingsRow icon={Download} title="Экспортировать JSON" description="Все транзакции, категории, профиль, бюджет и тема" onClick={handleJsonExport} />
+              <SettingsRow icon={Download} title="Экспортировать JSON" description="Счета, транзакции, категории, профиль, бюджет и настройки оформления" onClick={handleJsonExport} />
               <SettingsRow icon={Upload} title="Импортировать JSON" description="Полностью восстановить данные из файла" onClick={() => { setMessage(null); jsonFileRef.current?.click(); }} />
             </SettingsCard>
             <SectionLabel>Таблицы и совместимость</SectionLabel>
             <SettingsCard>
-              <SettingsRow icon={FileSpreadsheet} title="Экспортировать CSV" description={`${transactions.length} транзакций · Excel и Google Sheets`} onClick={handleCsvExport} />
-              <SettingsRow icon={FileSpreadsheet} title="Импортировать CSV" description="Заменить историю или добавить транзакции из CSV" onClick={() => { setMessage(null); csvFileRef.current?.click(); }} />
+              <SettingsRow icon={FileSpreadsheet} title="Экспортировать CSV" description={`${transactions.filter((transaction) => !transaction.isTransfer).length} операций (доходы и расходы) · Excel и Google Sheets`} onClick={handleCsvExport} />
+              <SettingsRow icon={FileSpreadsheet} title="Импортировать CSV" description="Заменить доходы/расходы или добавить из CSV; внутренние переводы сохраняются" onClick={() => { setMessage(null); csvFileRef.current?.click(); }} />
             </SettingsCard>
             <input ref={jsonFileRef} type="file" accept=".json,application/json" className="hidden" onChange={(event) => void handleJsonFile(event.target.files?.[0])} />
             <input ref={csvFileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => void handleCsvFile(event.target.files?.[0])} />
@@ -662,7 +674,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
             <SectionLabel>Приватность и данные</SectionLabel>
             <SettingsCard>
               <SettingsRow icon={ShieldCheck} title="Локальное хранение" description="Основные данные приложения сохраняются в хранилище этого браузера." trailing={<Check className="h-4 w-4 text-emerald-500" />} />
-              <SettingsRow icon={FileJson} title="Резервная копия" description="JSON позволяет перенести или восстановить профиль, бюджет, категории и историю." onClick={() => setPage('data')} />
+              <SettingsRow icon={FileJson} title="Резервная копия" description="JSON позволяет перенести или восстановить счета, профиль, бюджет, категории и историю." onClick={() => setPage('data')} />
             </SettingsCard>
             <p className="mt-5 px-1 text-xs leading-5 text-neutral-400 dark:text-neutral-500">Neo Finance — независимый проект. Регулярно сохраняйте JSON-копию и храните её в безопасном месте.</p>
           </>
@@ -683,7 +695,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
                   {pendingBackup
-                    ? `Текущие данные будут заменены. Файл содержит ${pendingBackup.data.transactions.length} транзакций и ${pendingBackup.data.categories.length} категорий, а также профиль, бюджет и тему.`
+                    ? `Текущие данные будут заменены. Файл содержит ${pendingBackup.data.accounts.length} счетов, ${pendingBackup.data.goals.length} целей, ${pendingBackup.data.transactions.length} транзакций и ${pendingBackup.data.categories.length} категорий, а также профиль, бюджет и настройки оформления.`
                     : pendingCsvTransactions
                       ? `В файле ${pendingCsvTransactions.length} транзакций. Выберите, что сделать с текущей историей. Профиль и бюджет не изменятся.`
                       : `Категория «${deleteTarget?.name}» исчезнет из выбора. Если она используется в истории, записи останутся и категория будет архивирована.`}
@@ -695,7 +707,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
             {pendingCsvTransactions && (
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => setCsvMode('replace')} className={`rounded-2xl border px-3 py-3 text-left transition-colors ${csvMode === 'replace' ? 'border-mint bg-mint/10' : 'border-neutral-200 dark:border-white/10'}`}>
-                  <span className="block text-sm font-semibold">Заменить</span><span className="mt-1 block text-[11px] text-neutral-400">Только транзакции из CSV</span>
+                  <span className="block text-sm font-semibold">Заменить</span><span className="mt-1 block text-[11px] text-neutral-400">Доходы и расходы из CSV; переводы сохраняются</span>
                 </button>
                 <button type="button" onClick={() => setCsvMode('append')} className={`rounded-2xl border px-3 py-3 text-left transition-colors ${csvMode === 'append' ? 'border-mint bg-mint/10' : 'border-neutral-200 dark:border-white/10'}`}>
                   <span className="block text-sm font-semibold">Добавить</span><span className="mt-1 block text-[11px] text-neutral-400">Пропускать совпадающие ID</span>

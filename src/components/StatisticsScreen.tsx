@@ -96,10 +96,12 @@ function getCategoryKey(transaction: Transaction): string {
 export function StatisticsScreen({
   transactions,
   categories,
+  otherCurrencyCodes = [],
   onSelectTransaction,
 }: {
   transactions: Transaction[];
   categories: CustomCategory[];
+  otherCurrencyCodes?: string[];
   onSelectTransaction: (transaction: Transaction) => void;
 }) {
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -122,6 +124,7 @@ export function StatisticsScreen({
   const periodTransactions = useMemo(() => {
     const prefix = selectedMonthKey;
     return transactions.filter((transaction) => {
+      if (transaction.isTransfer) return false;
       const isoDate = resolveTransactionDateISO(transaction);
       return Boolean(isoDate && isoDate.startsWith(prefix));
     });
@@ -299,6 +302,12 @@ export function StatisticsScreen({
           ))}
         </div>
       </header>
+
+      {otherCurrencyCodes.length > 0 && (
+        <p role="note" className="mb-3 rounded-xl neu-inset px-3 py-2.5 text-xs leading-relaxed text-neutral-600 dark:text-neutral-300">
+          Статистика и бюджет показаны в RUB. Операции в {otherCurrencyCodes.join(', ')} доступны отдельно в Кошельке и не складываются с рублями.
+        </p>
+      )}
 
       <section className="rounded-3xl neu-card p-5">
         <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-neutral-400 dark:text-neutral-500">

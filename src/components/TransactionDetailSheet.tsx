@@ -1,25 +1,30 @@
 import { useEffect, useState } from 'react';
 import {
   ArrowDownRight,
+  ArrowLeftRight,
   ArrowUpRight,
   Check,
   Pencil,
   Trash2,
 } from 'lucide-react';
 import { formatCurrency, type Transaction } from '@/data/mockData';
+import type { Account } from '@/data/accounts';
+import { MAIN_ACCOUNT_ID } from '@/data/accounts';
 import type { CustomCategory } from '@/hooks/useCategories';
 import { IconRenderer } from '@/components/IconRenderer';
 import { DeleteConfirmationPanel } from '@/components/DeleteConfirmationPanel';
 import { AmountKeyboard, AmountTrigger } from '@/components/AmountKeyboard';
 import { BottomSheet } from '@/components/ui/BottomSheet';
+import { getCurrencySymbol } from '@/utils/currency';
 
 type TxType = 'expense' | 'income';
-type TransactionUpdates = { amount: number; categoryId: string; isIncome: boolean };
+type TransactionUpdates = { amount: number; categoryId: string; isIncome: boolean; accountId: string };
 
 interface TransactionDetailSheetProps {
   open: boolean;
   transaction: Transaction | null;
   categories: CustomCategory[];
+  accounts: Account[];
   onClose: () => void;
   onExited?: () => void;
   onUpdate: (id: number, updates: TransactionUpdates) => void;
@@ -30,6 +35,7 @@ export function TransactionDetailSheet({
   open,
   transaction,
   categories,
+  accounts,
   onClose,
   onExited,
   onUpdate,
@@ -40,6 +46,7 @@ export function TransactionDetailSheet({
   const [editAmount, setEditAmount] = useState('');
   const [editCategoryId, setEditCategoryId] = useState('');
   const [editType, setEditType] = useState<TxType>('expense');
+  const [editAccountId, setEditAccountId] = useState<string>(MAIN_ACCOUNT_ID);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
 
   useEffect(() => {
@@ -49,6 +56,7 @@ export function TransactionDetailSheet({
     setEditAmount(String(transaction.amount));
     setEditCategoryId(transaction.categoryId ?? '');
     setEditType(transaction.isIncome ? 'income' : 'expense');
+    setEditAccountId(transaction.accountId || MAIN_ACCOUNT_ID);
     setKeyboardOpen(false);
   }, [transaction]);
 
@@ -56,6 +64,13 @@ export function TransactionDetailSheet({
   if (!activeTransaction) return null;
 
   const currentCategory = categories.find((category) => category.id === activeTransaction.categoryId);
+  const currentAccount = accounts.find((account) => account.id === (activeTransaction.accountId || MAIN_ACCOUNT_ID));
+  const destinationAccount = activeTransaction.toAccountId
+    ? accounts.find((account) => account.id === activeTransaction.toAccountId)
+    : undefined;
+  const transactionCurrency = currentAccount?.currency ?? 'RUB';
+  const transactionCurrencySymbol = getCurrencySymbol(transactionCurrency);
+  const editableAccounts = accounts.filter((account) => account.currency === transactionCurrency && (!account.isArchived || account.id === currentAccount?.id));
   const categoryName = currentCategory?.name ?? activeTransaction.category;
   const categoryIconName = currentCategory?.iconName ?? activeTransaction.categoryIconName ?? 'HelpCircle';
   const editCategories = categories.filter(
@@ -71,6 +86,7 @@ export function TransactionDetailSheet({
       (category) => !category.isArchived && category.isIncome === activeTransaction.isIncome
     );
     setEditAmount(String(activeTransaction.amount));
+    setEditAccountId(currentAccount?.id ?? MAIN_ACCOUNT_ID);
     setEditType(transactionType);
     setEditCategoryId(current && current.isIncome === activeTransaction.isIncome
       ? current.id
@@ -101,11 +117,14 @@ export function TransactionDetailSheet({
     const selectedCategory = categories.find((category) => category.id === editCategoryId);
     if (!selectedCategory || selectedCategory.isIncome !== (editType === 'income')) return;
     if (selectedCategory.isArchived && selectedCategory.id !== activeTransaction.categoryId) return;
+    const nextAccount = editableAccounts.find((account) => account.id === editAccountId);
+    if (!nextAccount) return;
 
     onUpdate(activeTransaction.id, {
       amount: parsed,
       categoryId: selectedCategory.id,
       isIncome: editType === 'income',
+      accountId: nextAccount.id,
     });
     setKeyboardOpen(false);
     setMode('view');
@@ -163,6 +182,9 @@ export function TransactionDetailSheet({
             transaction={activeTransaction}
             categoryName={categoryName}
             categoryIconName={categoryIconName}
+            accountName={currentAccount?.name ?? 'Основной счёт'}
+            destinationAccountName={destinationAccount?.name ?? 'Неизвестный счёт'}
+            currencySymbol={transactionCurrencySymbol}
             onEdit={startEditing}
             onDelete={() => setMode('delete')}
           />
@@ -176,6 +198,10 @@ export function TransactionDetailSheet({
             setEditCategoryId={setEditCategoryId}
             editCategories={editCategories}
             editType={editType}
+            editableAccounts={editableAccounts}
+            editAccountId={editAccountId}
+            setEditAccountId={setEditAccountId}
+            currencySymbol={transactionCurrencySymbol}
             onTypeChange={handleEditTypeChange}
             onSave={handleSaveEdit}
             onCancel={() => { setKeyboardOpen(false); setMode('view'); }}
@@ -188,6 +214,7 @@ export function TransactionDetailSheet({
           <DeleteMode
             transaction={activeTransaction}
             categoryName={categoryName}
+            currencySymbol={transactionCurrencySymbol}
             onConfirm={handleDelete}
             onCancel={() => setMode('view')}
           />
@@ -201,12 +228,18 @@ function ViewMode({
   transaction,
   categoryName,
   categoryIconName,
+  accountName,
+  destinationAccountName,
+  currencySymbol,
   onEdit,
   onDelete,
 }: {
   transaction: Transaction;
   categoryName: string;
   categoryIconName: string;
+  accountName: string;
+  destinationAccountName: string;
+  currencySymbol: string;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -219,38 +252,57 @@ function ViewMode({
       <div className="mt-5 flex flex-col items-center">
         <div
           className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
-            transaction.isIncome
+            transaction.isTransfer
+              ? 'bg-indigoblue/10 text-indigoblue dark:text-indigo-300'
+              : transaction.isIncome
               ? 'bg-mint/10 dark:bg-mint/10'
               : 'bg-neutral-100 dark:bg-neutral-800/50'
           }`}
         >
-          <IconRenderer
-            name={categoryIconName}
-            className={`h-7 w-7 ${
-              transaction.isIncome ? 'text-mint dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
-            }`}
-          />
+          {transaction.isTransfer ? <ArrowLeftRight className="h-7 w-7" aria-hidden="true" /> : (
+            <IconRenderer
+              name={categoryIconName}
+              className={`h-7 w-7 ${
+                transaction.isIncome ? 'text-green-700 dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
+              }`}
+            />
+          )}
         </div>
         <p className="mt-3 text-3xl font-light tracking-tight text-neutral-900 dark:text-white tabular-nums">
-          {transaction.isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
-          <span className="ml-1 text-lg text-neutral-400 dark:text-neutral-500">₽</span>
+          {transaction.isTransfer ? '' : transaction.isIncome ? '+' : '-'}{formatCurrency(transaction.amount)}
+          <span className="ml-1 text-lg text-neutral-400 dark:text-neutral-500">{currencySymbol}</span>
         </p>
         <span
           className={`mt-2 flex items-center gap-1 text-xs font-medium ${
-            transaction.isIncome ? 'text-mint dark:text-mint' : 'text-neutral-400 dark:text-neutral-500'
+            transaction.isTransfer
+              ? 'text-indigoblue dark:text-indigo-300'
+              : transaction.isIncome ? 'text-green-700 dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
           }`}
         >
-          {transaction.isIncome ? (
+          {transaction.isTransfer ? (
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+          ) : transaction.isIncome ? (
             <ArrowUpRight className="h-3.5 w-3.5" />
           ) : (
             <ArrowDownRight className="h-3.5 w-3.5" />
           )}
-          {transaction.isIncome ? 'Доход' : 'Расход'}
+          {transaction.isTransfer ? 'Перевод между счетами' : transaction.isIncome ? 'Доход' : 'Расход'}
         </span>
       </div>
 
       <div className="mt-5 space-y-2.5">
-        <DetailRow label="Категория" value={categoryName} />
+        {transaction.isTransfer ? (
+          <>
+            <DetailRow label="Откуда" value={accountName} />
+            <DetailRow label="Куда" value={destinationAccountName} />
+            <DetailRow label="Тип операции" value="Внутренний перевод" />
+          </>
+        ) : (
+          <>
+            <DetailRow label="Категория" value={categoryName} />
+            <DetailRow label="Счёт" value={accountName} />
+          </>
+        )}
         <DetailRow label="Дата" value={transaction.date} />
         <DetailRow label="ID" value={`#${transaction.id}`} />
       </div>
@@ -258,13 +310,13 @@ function ViewMode({
       <div className="flex-1" />
 
       <div className="flex gap-2.5">
-        <button
+        {!transaction.isTransfer && <button
           onClick={onEdit}
           className="flex flex-1 items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium text-neutral-700 dark:text-white neu-card-sm transition-all duration-200 active:scale-[0.98] gpu"
         >
           <Pencil className="h-4 w-4" />
           Изменить
-        </button>
+        </button>}
         <button
           onClick={onDelete}
           className="flex items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-medium text-red-500 dark:text-red-400 transition-all duration-200 active:scale-[0.98] gpu"
@@ -296,6 +348,10 @@ function EditMode({
   setEditCategoryId,
   editCategories,
   editType,
+  editableAccounts,
+  editAccountId,
+  setEditAccountId,
+  currencySymbol,
   onTypeChange,
   onSave,
   onCancel,
@@ -308,6 +364,10 @@ function EditMode({
   setEditCategoryId: (categoryId: string) => void;
   editCategories: CustomCategory[];
   editType: TxType;
+  editableAccounts: Account[];
+  editAccountId: string;
+  setEditAccountId: (id: string) => void;
+  currencySymbol: string;
   onTypeChange: (type: TxType) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -360,12 +420,31 @@ function EditMode({
             onToggleKeyboard={() => setKeyboardOpen(!keyboardOpen)}
             onOpenKeyboard={() => setKeyboardOpen(true)}
             onCloseKeyboard={() => setKeyboardOpen(false)}
-            label="Сумма редактируемой транзакции в рублях"
+            label="Сумма редактируемой транзакции"
             keyboardId="edit-transaction-amount-keyboard"
             size="medium"
+            showCurrency={false}
           />
+          <span className="ml-1 text-lg font-light text-neutral-400 dark:text-neutral-500">{currencySymbol}</span>
         </div>
       </div>
+
+      {!keyboardOpen && editableAccounts.length > 1 && <div className="mt-4 shrink-0">
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">Счёт</p>
+        <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+          {editableAccounts.map((account) => (
+            <button
+              key={account.id}
+              type="button"
+              onClick={() => setEditAccountId(account.id)}
+              aria-pressed={editAccountId === account.id}
+              className={`min-h-9 shrink-0 rounded-full px-3 text-[11px] font-medium ${editAccountId === account.id ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900' : 'neu-inset text-neutral-500 dark:text-neutral-400'}`}
+            >
+              {account.name}
+            </button>
+          ))}
+        </div>
+      </div>}
 
       {!keyboardOpen && <div className="mt-5 min-h-0 flex-1">
         <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
@@ -459,18 +538,20 @@ function EditMode({
 function DeleteMode({
   transaction,
   categoryName,
+  currencySymbol,
   onConfirm,
   onCancel,
 }: {
   transaction: Transaction;
   categoryName: string;
+  currencySymbol: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   return (
     <DeleteConfirmationPanel
       title="Удалить транзакцию?"
-      description={`«${categoryName}» на ${formatCurrency(transaction.amount)} ₽ будет удалена без возможности восстановления.`}
+      description={`«${categoryName}» на ${formatCurrency(transaction.amount)} ${currencySymbol} будет удалена без возможности восстановления.`}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />
