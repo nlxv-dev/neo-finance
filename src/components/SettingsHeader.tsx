@@ -62,7 +62,7 @@ export function SettingsHeader({ title, onBack }: SettingsHeaderProps) {
         </svg>
       </button>
 
-      <h1 className="ml-4 flex h-10 items-center text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
+      <h1 tabIndex={-1} data-settings-focus-heading className="ml-4 flex h-10 items-center text-xl font-semibold tracking-tight text-slate-900 outline-none dark:text-white">
         {title}
       </h1>
     </header>

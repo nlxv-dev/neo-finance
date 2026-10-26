@@ -99,8 +99,18 @@ describe('StatisticsScreen daily and monthly views', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Предыдущий день' }));
 
     expect(screen.getByText('Расходы за вчера')).toBeInTheDocument();
-    expect(screen.getByText('Такси')).toBeInTheDocument();
-    expect(screen.queryByText('Кафе')).not.toBeInTheDocument();
+
+    // The category label and the transaction title can both be 'Такси'.
+    // Target the expandable category row instead of an ambiguous text match.
+    const taxiCategory = screen.getAllByText('Такси').find(
+      (element) => element.closest('button[aria-expanded]') !== null,
+    );
+    expect(taxiCategory).toBeInTheDocument();
+
+    const cafeCategory = screen.queryAllByText('Кафе').find(
+      (element) => element.closest('button[aria-expanded]') !== null,
+    );
+    expect(cafeCategory).toBeUndefined();
   });
 
   it('keeps the existing monthly graph as the default view', () => {

@@ -268,6 +268,14 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(() => readLastBackupAt());
   const jsonFileRef = useRef<HTMLInputElement>(null);
   const csvFileRef = useRef<HTMLInputElement>(null);
+  const settingsRootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      settingsRootRef.current?.querySelector<HTMLElement>('[data-settings-focus-heading]')?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [page]);
 
   useEffect(() => {
     if (page === 'profile') {
@@ -412,7 +420,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const childPageTitle = page === 'root' ? null : CHILD_PAGE_TITLES[page];
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-transparent text-neutral-900 dark:text-white">
+    <div ref={settingsRootRef} className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-transparent text-neutral-900 dark:text-white">
       <div className="mx-auto min-h-full max-w-md pb-[calc(env(safe-area-inset-bottom)_+_32px)] pt-[calc(env(safe-area-inset-top)_+_12px)]">
         {childPageTitle && <SettingsHeader title={childPageTitle} onBack={backToRoot} />}
 
@@ -425,7 +433,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
               </button>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-neutral-400 dark:text-neutral-500">NEO FINANCE</p>
-                <h1 className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-white">Настройки</h1>
+                <h1 tabIndex={-1} data-settings-focus-heading className="text-2xl font-semibold tracking-tight text-neutral-950 outline-none dark:text-white">Настройки</h1>
               </div>
             </header>
 
