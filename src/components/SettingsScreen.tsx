@@ -49,6 +49,7 @@ import {
   validateBackupFile,
   type BackupFile,
   type CsvImportMode,
+  type ParsedTransactionsCsv,
 } from '@/backup/backupService';
 
 interface SettingsScreenProps {
@@ -261,7 +262,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const [editorCategoryId, setEditorCategoryId] = useState<string | 'new' | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CustomCategory | null>(null);
   const [pendingBackup, setPendingBackup] = useState<BackupFile | null>(null);
-  const [pendingCsvTransactions, setPendingCsvTransactions] = useState<Transaction[] | null>(null);
+  const [pendingCsvTransactions, setPendingCsvTransactions] = useState<ParsedTransactionsCsv | null>(null);
   const [csvMode, setCsvMode] = useState<CsvImportMode>('replace');
   const [message, setMessage] = useState<{ type: 'error' | 'info'; text: string } | null>(null);
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(() => readLastBackupAt());
@@ -315,12 +316,9 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const handleCsvExport = () => {
     try {
       downloadTransactionsCsv(transactions);
-      const transfersExcluded = transactions.filter((transaction) => transaction.isTransfer).length;
       setMessage({
         type: 'info',
-        text: transfersExcluded > 0
-          ? `CSV сформирован: в него вошли доходы и расходы. Внутренние переводы (${transfersExcluded}) не включены, поскольку CSV-формат их не описывает; они останутся в приложении и будут включены в JSON-бэкап при его экспорте.`
-          : 'CSV-файл с историей транзакций сформирован.',
+        text: 'CSV v2 сформирован: включены доходы, расходы, переводы и ссылки на счета. Для переноса счетов, целей и настроек между устройствами используйте полный JSON-бэкап.',
       });
     } catch {
       setMessage({ type: 'error', text: 'Не удалось экспортировать историю в CSV.' });
@@ -375,7 +373,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const confirmCsvImport = () => {
     if (!pendingCsvTransactions) return;
     try {
-      importCsvTransactionsToStorage(pendingCsvTransactions, transactions, categories, csvMode);
+      importCsvTransactionsToStorage(pendingCsvTransactions.transactions, transactions, categories, csvMode, accounts, pendingCsvTransactions.schemaVersion);
       window.location.reload();
     } catch (error) {
       setPendingCsvTransactions(null);
@@ -574,7 +572,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
             <div className="rounded-3xl neu-card p-4">
               <div className="flex items-start gap-3">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-mint/15 text-emerald-600 dark:text-mint"><ShieldCheck className="h-5 w-5" /></span>
-                <div><h2 className="text-sm font-semibold">Защитите свои финансовые данные</h2><p className="mt-1 text-xs leading-5 text-neutral-500 dark:text-neutral-400">JSON содержит полные данные для восстановления, включая счета и переводы. CSV предназначен для таблиц и переносит доходы и расходы; внутренние переводы в текущем CSV-формате не представлены.</p></div>
+                <div><h2 className="text-sm font-semibold">Защитите свои финансовые данные</h2><p className="mt-1 text-xs leading-5 text-neutral-500 dark:text-neutral-400">JSON — полный бэкап счетов, операций, целей и настроек. CSV v2 включает операции, переводы и ID счетов; для импорта ссылки на счета должны существовать в приложении. Для переноса на другое устройство используйте JSON.</p></div>
               </div>
               <div className="mt-4 border-t border-neutral-100 pt-3 dark:border-white/[0.06]">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">Последняя JSON-копия</p>
@@ -592,8 +590,8 @@ export function SettingsScreen(props: SettingsScreenProps) {
             </SettingsCard>
             <SectionLabel>Таблицы и совместимость</SectionLabel>
             <SettingsCard>
-              <SettingsRow icon={FileSpreadsheet} title="Экспортировать CSV" description={`${transactions.filter((transaction) => !transaction.isTransfer).length} операций (доходы и расходы) · Excel и Google Sheets`} onClick={handleCsvExport} />
-              <SettingsRow icon={FileSpreadsheet} title="Импортировать CSV" description="Заменить доходы/расходы или добавить из CSV; внутренние переводы сохраняются" onClick={() => { setMessage(null); csvFileRef.current?.click(); }} />
+              <SettingsRow icon={FileSpreadsheet} title="Экспортировать CSV" description={`${transactions.length} операций, включая переводы · Excel и Google Sheets`} onClick={handleCsvExport} />
+              <SettingsRow icon={FileSpreadsheet} title="Импортировать CSV" description="Импорт операций и переводов из CSV v2; поддерживается старый формат" onClick={() => { setMessage(null); csvFileRef.current?.click(); }} />
             </SettingsCard>
             <input ref={jsonFileRef} type="file" accept=".json,application/json" className="hidden" onChange={(event) => void handleJsonFile(event.target.files?.[0])} />
             <input ref={csvFileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => void handleCsvFile(event.target.files?.[0])} />
@@ -669,11 +667,12 @@ export function SettingsScreen(props: SettingsScreenProps) {
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-mint/30 to-indigo-400/25"><Wallet className="h-8 w-8 text-neutral-800 dark:text-white" /></div>
               <h2 className="mt-4 text-xl font-semibold tracking-tight">Neo Finance</h2>
               <p className="mt-1 text-xs text-neutral-400">Личные финансы без лишнего шума</p>
+              <p className="mt-2 text-[11px] font-medium tracking-wide text-neutral-400 dark:text-neutral-500">v{__APP_VERSION__}</p>
               <div className="mx-auto mt-4 h-1 w-12 rounded-full bg-gradient-to-r from-mint to-indigoblue" />
             </div>
             <SectionLabel>Приватность и данные</SectionLabel>
             <SettingsCard>
-              <SettingsRow icon={ShieldCheck} title="Локальное хранение" description="Основные данные приложения сохраняются в хранилище этого браузера." trailing={<Check className="h-4 w-4 text-emerald-500" />} />
+              <SettingsRow icon={ShieldCheck} title="Локальное хранение" description="Данные хранятся локально в этом браузере без шифрования. Защитите устройство и регулярно сохраняйте JSON-копию." trailing={<Check className="h-4 w-4 text-emerald-500" />} />
               <SettingsRow icon={FileJson} title="Резервная копия" description="JSON позволяет перенести или восстановить счета, профиль, бюджет, категории и историю." onClick={() => setPage('data')} />
             </SettingsCard>
             <p className="mt-5 px-1 text-xs leading-5 text-neutral-400 dark:text-neutral-500">Neo Finance — независимый проект. Регулярно сохраняйте JSON-копию и храните её в безопасном месте.</p>
@@ -697,7 +696,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
                   {pendingBackup
                     ? `Текущие данные будут заменены. Файл содержит ${pendingBackup.data.accounts.length} счетов, ${pendingBackup.data.goals.length} целей, ${pendingBackup.data.transactions.length} транзакций и ${pendingBackup.data.categories.length} категорий, а также профиль, бюджет и настройки оформления.`
                     : pendingCsvTransactions
-                      ? `В файле ${pendingCsvTransactions.length} транзакций. Выберите, что сделать с текущей историей. Профиль и бюджет не изменятся.`
+                      ? `В файле ${pendingCsvTransactions.transactions.length} операций. ${pendingCsvTransactions.schemaVersion === 1 ? 'Это старый CSV: операции будут назначены основному счёту, а существующие переводы сохранятся при замене.' : 'CSV v2 сохраняет ID счетов и переводы; счета с этими ID должны существовать в приложении.'} Профиль и бюджет не изменятся.`
                       : `Категория «${deleteTarget?.name}» исчезнет из выбора. Если она используется в истории, записи останутся и категория будет архивирована.`}
                 </p>
               </div>
@@ -707,7 +706,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
             {pendingCsvTransactions && (
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => setCsvMode('replace')} className={`rounded-2xl border px-3 py-3 text-left transition-colors ${csvMode === 'replace' ? 'border-mint bg-mint/10' : 'border-neutral-200 dark:border-white/10'}`}>
-                  <span className="block text-sm font-semibold">Заменить</span><span className="mt-1 block text-[11px] text-neutral-400">Доходы и расходы из CSV; переводы сохраняются</span>
+                  <span className="block text-sm font-semibold">Заменить</span><span className="mt-1 block text-[11px] text-neutral-400">Содержимое CSV заменит текущую историю</span>
                 </button>
                 <button type="button" onClick={() => setCsvMode('append')} className={`rounded-2xl border px-3 py-3 text-left transition-colors ${csvMode === 'append' ? 'border-mint bg-mint/10' : 'border-neutral-200 dark:border-white/10'}`}>
                   <span className="block text-sm font-semibold">Добавить</span><span className="mt-1 block text-[11px] text-neutral-400">Пропускать совпадающие ID</span>

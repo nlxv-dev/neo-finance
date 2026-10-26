@@ -81,7 +81,6 @@ export function GoalEditSheet({ open, goal, canWrite, onClose, onSave, onDelete 
     else setError('Не удалось сохранить цель. Проверьте данные и состояние хранилища.');
   };
 
-  if (!open) return null;
 
   return (
     <BottomSheet

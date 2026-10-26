@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type TouchEvent } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type TouchEvent } from 'react';
 import { ArrowDownRight, ArrowUpRight, Minus, Plus } from 'lucide-react';
 import { AnimatedCounter } from '@/components/AnimatedCounter';
 import type { Account } from '@/data/accounts';
@@ -18,9 +18,7 @@ interface BalanceCardCarouselProps {
   accountBalances: Record<string, number>;
   transactions: Transaction[];
   currentMonthKey: string;
-  activeCardKey: string;
   canWriteAccounts: boolean;
-  onSelectCard: (key: string) => void;
   onEditBalance: (accountId: string) => void;
   onAddAccount: () => void;
 }
@@ -43,20 +41,21 @@ function getCardVariant(account: Account): string {
   }
 }
 
-export function BalanceCardCarousel({
+export const BalanceCardCarousel = memo(function BalanceCardCarousel({
   accounts,
   accountBalances,
   transactions,
   currentMonthKey,
-  activeCardKey,
   canWriteAccounts,
-  onSelectCard,
   onEditBalance,
   onAddAccount,
 }: BalanceCardCarouselProps) {
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const suppressClick = useRef(false);
   const [direction, setDirection] = useState<'next' | 'previous'>('next');
+  const [activeCardKey, setActiveCardKey] = useState<string>(MAIN_ACCOUNT_ID);
+  const activeCardRef = useRef<HTMLButtonElement | null>(null);
+  const previousActiveKeyRef = useRef<string | null>(null);
 
   const slides = useMemo<CardSlide[]>(() => {
     const activeAccounts = accounts
@@ -80,15 +79,44 @@ export function BalanceCardCarousel({
   const farSlide = slides[(activeIndex + 2) % slides.length] ?? nearSlide;
   const knownAccountIds = useMemo(() => accounts.map((account) => account.id), [accounts]);
 
+  const previousAccountIdsRef = useRef<Set<string>>(new Set(accounts.map((account) => account.id)));
+
   useEffect(() => {
-    if (activeSlide && activeSlide.key !== activeCardKey) onSelectCard(activeSlide.key);
-  }, [activeCardKey, activeSlide, onSelectCard]);
+    if (activeSlide && activeSlide.key !== activeCardKey) setActiveCardKey(activeSlide.key);
+  }, [activeCardKey, activeSlide]);
+
+  useEffect(() => {
+    const previousIds = previousAccountIdsRef.current;
+    const newlyCreated = accounts.find((account) => !previousIds.has(account.id) && !account.isArchived);
+    previousAccountIdsRef.current = new Set(accounts.map((account) => account.id));
+    if (newlyCreated) setActiveCardKey(newlyCreated.id);
+  }, [accounts]);
+
+  useEffect(() => {
+    const activeKey = activeSlide?.key ?? null;
+    const previousKey = previousActiveKeyRef.current;
+    previousActiveKeyRef.current = activeKey;
+    const element = activeCardRef.current;
+    if (!element || !previousKey || !activeKey || previousKey === activeKey) return;
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (typeof element.animate !== 'function') return;
+
+    const fromX = direction === 'next' ? '12px' : '-12px';
+    const animation = element.animate(
+      [
+        { opacity: 0.78, translate: `${fromX} 0` },
+        { opacity: 1, translate: '0 0' },
+      ],
+      { duration: 250, easing: 'cubic-bezier(.22,.7,.25,1)', fill: 'none' },
+    );
+    return () => animation.cancel();
+  }, [activeSlide?.key, direction]);
 
   const move = (step: number) => {
     if (slides.length < 2) return;
     const nextIndex = (activeIndex + step + slides.length) % slides.length;
     setDirection(step > 0 ? 'next' : 'previous');
-    onSelectCard(slides[nextIndex].key);
+    setActiveCardKey(slides[nextIndex].key);
   };
 
   const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
@@ -133,10 +161,14 @@ export function BalanceCardCarousel({
 
   const renderLayerVariant = (slide: CardSlide) => slide.kind === 'add' ? 'add' : getCardVariant(slide.account);
   const activeAccount = activeSlide?.kind === 'account' ? activeSlide.account : null;
+  const activeAccountId = activeAccount?.id ?? null;
   const activeBalance = activeAccount ? (accountBalances[activeAccount.id] ?? activeAccount.initialBalance) : 0;
-  const monthlyMovement = activeAccount
-    ? calculateAccountMonthlyMovement(transactions, activeAccount.id, currentMonthKey, knownAccountIds)
-    : 0;
+  const monthlyMovement = useMemo(
+    () => activeAccountId
+      ? calculateAccountMonthlyMovement(transactions, activeAccountId, currentMonthKey, knownAccountIds)
+      : 0,
+    [transactions, activeAccountId, currentMonthKey, knownAccountIds],
+  );
   const currency = activeAccount ? getCurrencySymbol(activeAccount.currency) : '';
 
   return (
@@ -144,21 +176,21 @@ export function BalanceCardCarousel({
       className="balance-carousel select-none"
       role="group"
       aria-roledescription="карусель счетов"
-      aria-label={`Счёт ${activeIndex + 1} из ${slides.length}${activeAccount ? `: ${getCardLabel(activeAccount)}` : ': создать новый счёт'}`}
+      aria-label="Карусель счетов"
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="balance-card-stack" aria-live="polite">
+      <div className="balance-card-stack">
         <div className={`balance-card-layer balance-card-layer--far balance-card-layer--${renderLayerVariant(farSlide)}`} aria-hidden="true" />
         <div className={`balance-card-layer balance-card-layer--near balance-card-layer--${renderLayerVariant(nearSlide)}`} aria-hidden="true" />
 
         {activeAccount ? (
           <button
-            key={activeAccount.id}
+            ref={activeCardRef}
             type="button"
-            className={`neo-balance-card neo-balance-card--${getCardVariant(activeAccount)} neo-balance-card--enter-${direction}`}
+            className={`neo-balance-card neo-balance-card--${getCardVariant(activeAccount)}`}
             onClick={() => handleActiveCardClick(activeSlide)}
             aria-label={`Изменить текущий баланс «${getCardLabel(activeAccount)}»: ${formatCurrency(activeBalance)} ${currency}`}
           >
@@ -191,9 +223,9 @@ export function BalanceCardCarousel({
           </button>
         ) : (
           <button
-            key={ADD_ACCOUNT_CARD_KEY}
+            ref={activeCardRef}
             type="button"
-            className={`neo-balance-card neo-balance-card--add neo-balance-card--enter-${direction}`}
+            className="neo-balance-card neo-balance-card--add"
             onClick={() => handleActiveCardClick(activeSlide)}
             disabled={!canWriteAccounts}
             aria-label="Создать новый счёт"
@@ -204,6 +236,12 @@ export function BalanceCardCarousel({
         )}
       </div>
 
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {activeAccount
+          ? `Счёт ${activeIndex + 1} из ${slides.length}: ${getCardLabel(activeAccount)}`
+          : `Счёт ${activeIndex + 1} из ${slides.length}: создать новый счёт`}
+      </span>
+
       <div className="balance-carousel-pagination" role="group" aria-label="Выбрать счёт">
         {slides.map((slide, index) => (
           <button
@@ -212,7 +250,7 @@ export function BalanceCardCarousel({
             className={`balance-carousel-dot-hit ${slide.key === activeSlide.key ? 'is-active' : ''}`}
             onClick={() => {
               setDirection(index > activeIndex ? 'next' : 'previous');
-              onSelectCard(slide.key);
+              setActiveCardKey(slide.key);
             }}
             aria-label={slide.kind === 'add' ? 'Перейти к созданию нового счёта' : `Показать счёт: ${slide.account.name}`}
             aria-pressed={slide.key === activeSlide.key}
@@ -223,4 +261,4 @@ export function BalanceCardCarousel({
       </div>
     </div>
   );
-}
+});

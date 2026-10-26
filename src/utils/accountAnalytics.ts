@@ -30,16 +30,12 @@ export function filterTransactionsForAccount(
   });
 }
 
-export function summarizeAccountTransactions(
-  transactions: readonly Transaction[],
-  accountId: string,
-  knownAccountIds?: readonly string[],
-): AccountTransactionSummary {
+export function summarizeTransactions(transactions: readonly Transaction[]): AccountTransactionSummary {
   let income = 0;
   let expenses = 0;
   let count = 0;
 
-  for (const transaction of filterTransactionsForAccount(transactions, accountId, knownAccountIds)) {
+  for (const transaction of transactions) {
     if (!Number.isFinite(transaction.amount)) continue;
     count += 1;
     if (transaction.isTransfer) continue;
@@ -52,6 +48,14 @@ export function summarizeAccountTransactions(
   income = Math.round(income);
   expenses = Math.round(expenses);
   return { income, expenses, net: Math.round(income - expenses), count };
+}
+
+export function summarizeAccountTransactions(
+  transactions: readonly Transaction[],
+  accountId: string,
+  knownAccountIds?: readonly string[],
+): AccountTransactionSummary {
+  return summarizeTransactions(filterTransactionsForAccount(transactions, accountId, knownAccountIds));
 }
 /** Filters analytics to one currency without converting or summing unlike amounts.
  * Legacy rows and orphaned account references follow the same main-account fallback

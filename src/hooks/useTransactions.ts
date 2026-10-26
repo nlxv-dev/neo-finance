@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { type Transaction, initialTransactions } from '@/data/mockData';
-import { MAIN_ACCOUNT_ID } from '@/data/accounts';
+import { MAIN_ACCOUNT_ID, type Account } from '@/data/accounts';
 import type { CustomCategory } from '@/hooks/useCategories';
 import { resolveTransactionDateISO, toLocalISODate } from '@/data/transactionDates';
+import { getTransactionRuleError, MAX_TRANSACTION_AMOUNT } from '@/data/transactionRules';
 import {
   canPersistReadStatus,
   readStoredJson,
@@ -45,9 +46,10 @@ function getAvailableTransactionId(preferredId: number, transactions: readonly T
  * of silently dropping that row and saving a truncated transaction list.
  */
 function normalizeStoredTransactions(value: unknown, categories: CustomCategory[]): Transaction[] | null {
-  if (!Array.isArray(value)) return null;
+  if (!Array.isArray(value) || value.length > 50_000) return null;
 
   const normalized: Transaction[] = [];
+  const seenIds = new Set<number>();
 
   for (const candidate of value) {
     if (!isRecord(candidate)) return null;
@@ -55,19 +57,21 @@ function normalizeStoredTransactions(value: unknown, categories: CustomCategory[
 
     if (
       typeof item.id !== 'number' ||
-      !Number.isFinite(item.id) ||
+      !Number.isSafeInteger(item.id) || item.id < 0 ||
       typeof item.amount !== 'number' ||
-      !Number.isFinite(item.amount) ||
+      !Number.isSafeInteger(item.amount) || item.amount <= 0 || item.amount > MAX_TRANSACTION_AMOUNT ||
       typeof item.date !== 'string' ||
       typeof item.isIncome !== 'boolean'
     ) {
       return null;
     }
+    if (seenIds.has(item.id)) return null;
+    seenIds.add(item.id);
 
     if (
       Object.prototype.hasOwnProperty.call(item, 'categoryId') &&
       item.categoryId !== null &&
-      typeof item.categoryId !== 'string'
+      (typeof item.categoryId !== 'string' || item.categoryId.length > 128)
     ) {
       return null;
     }
@@ -96,6 +100,9 @@ function normalizeStoredTransactions(value: unknown, categories: CustomCategory[
         : typeof item.title === 'string'
           ? item.title
           : 'Без категории';
+    if (categoryName.length > 160 || (typeof item.title === 'string' && item.title.length > 160) ||
+      (typeof item.dateISO === 'string' && item.dateISO.length > 10) || item.date.length > 80 ||
+      (typeof item.categoryIconName === 'string' && item.categoryIconName.length > 100)) return null;
 
     const hasCategoryIdField = Object.prototype.hasOwnProperty.call(item, 'categoryId');
     const existingId = typeof item.categoryId === 'string' ? item.categoryId : null;
@@ -123,14 +130,16 @@ function normalizeStoredTransactions(value: unknown, categories: CustomCategory[
       : MAIN_ACCOUNT_ID;
     const isTransfer = item.isTransfer === true;
     const toAccountId = typeof item.toAccountId === 'string' ? item.toAccountId.trim() : '';
+    if (accountId.length > 128 || toAccountId.length > 128) return null;
     if (isTransfer && (!toAccountId || toAccountId === accountId || item.amount <= 0 || item.isIncome)) return null;
+    if (!isTransfer && toAccountId) return null;
 
     normalized.push({
       id: item.id,
-      title: typeof item.title === 'string' ? (linkedCategory?.name ?? item.title) : displayName,
-      categoryId: safeId,
-      category: displayName,
-      categoryIconName: iconName,
+      title: isTransfer ? 'Перевод между счетами' : (typeof item.title === 'string' ? (linkedCategory?.name ?? item.title) : displayName),
+      categoryId: isTransfer ? null : safeId,
+      category: isTransfer ? 'Перевод' : displayName,
+      categoryIconName: isTransfer ? 'ArrowLeftRight' : iconName,
       amount: item.amount,
       date: item.date,
       dateISO: resolveTransactionDateISO({
@@ -156,7 +165,7 @@ export interface TransactionInput {
   amount: number;
   categoryId: string;
   isIncome: boolean;
-  /** Defaults to the stable main account until account selection is available in the UI. */
+  /** Defaults to the stable main account when the caller does not supply one. */
   accountId?: string;
 }
 
@@ -168,15 +177,75 @@ export interface TransferInput {
 
 type TransactionUpdateInput = Partial<Pick<TransactionInput, 'amount' | 'categoryId' | 'isIncome' | 'accountId'>>;
 
+function buildUpdatedTransaction(
+  transaction: Transaction,
+  updates: TransactionUpdateInput,
+  categories: readonly CustomCategory[],
+  accounts: readonly Account[],
+): Transaction | null {
+  if (transaction.isTransfer) return null;
+
+  const amount = updates.amount ?? transaction.amount;
+  const isIncome = updates.isIncome ?? transaction.isIncome;
+  const nextCategoryId = updates.categoryId === undefined ? transaction.categoryId : updates.categoryId;
+  const categoryWasRequested = updates.categoryId !== undefined;
+  const selectedCategory = nextCategoryId
+    ? categories.find((category) => category.id === nextCategoryId)
+    : undefined;
+
+  if (categoryWasRequested && (!selectedCategory || (selectedCategory.isArchived && selectedCategory.id !== transaction.categoryId))) {
+    return null;
+  }
+  if (selectedCategory && selectedCategory.isIncome !== isIncome) return null;
+  if (updates.isIncome !== undefined && !categoryWasRequested && updates.isIncome !== transaction.isIncome) return null;
+
+  const currentAccountId = transaction.accountId?.trim() || MAIN_ACCOUNT_ID;
+  const nextAccountId = updates.accountId === undefined
+    ? currentAccountId
+    : (updates.accountId.trim() || currentAccountId);
+  const currentAccount = accounts.find((account) => account.id === currentAccountId);
+  const nextAccount = accounts.find((account) => account.id === nextAccountId);
+
+  if (!currentAccount || !nextAccount) return null;
+  const ruleError = getTransactionRuleError(
+    { amount, accountId: nextAccountId, isIncome, isTransfer: false },
+    accounts,
+    { requireActiveAccounts: true, allowArchivedAccountId: currentAccountId },
+  );
+  if (ruleError) return null;
+  if (currentAccount.currency.toUpperCase() !== nextAccount.currency.toUpperCase()) return null;
+
+  return {
+    ...transaction,
+    amount,
+    categoryId: nextCategoryId,
+    category: selectedCategory?.name ?? transaction.category,
+    categoryIconName: selectedCategory?.iconName ?? transaction.categoryIconName,
+    title: selectedCategory?.name ?? transaction.title,
+    isIncome,
+    accountId: nextAccountId,
+  };
+}
+
 export function useTransactions(
   categories: CustomCategory[],
   dependenciesHealthy = true
 ) {
   const [record, setRecord] = useState(() => loadTransactions(categories));
+  const recordRef = useRef(record);
   const [writeIssue, setWriteIssue] = useState<StorageIssue | null>(null);
   const transactions = record.value;
 
+  const commitRecord = useCallback((next: StorageReadResult<Transaction[]>): boolean => {
+    const current = recordRef.current;
+    if (!dependenciesHealthy || !canPersistReadStatus(current.status)) return false;
+    recordRef.current = next;
+    setRecord(next);
+    return true;
+  }, [dependenciesHealthy]);
+
   useEffect(() => {
+    recordRef.current = record;
     if (!dependenciesHealthy || !canPersistReadStatus(record.status)) return;
     const issue = writeStoredJson(STORAGE_KEY, record.value);
     setWriteIssue((previous) => {
@@ -184,18 +253,21 @@ export function useTransactions(
       if (issue && previous?.key === issue.key && previous.kind === issue.kind) return previous;
       return issue;
     });
-  }, [record.value, record.status, dependenciesHealthy]);
+  }, [record, dependenciesHealthy]);
 
-  const addTransaction = useCallback((input: TransactionInput) => {
+  const addTransaction = useCallback((input: TransactionInput, availableAccounts: readonly Account[]): boolean => {
+    const current = recordRef.current;
+    if (!dependenciesHealthy || !canPersistReadStatus(current.status)) return false;
+    const accountId = input.accountId?.trim() || MAIN_ACCOUNT_ID;
+    if (getTransactionRuleError({ amount: input.amount, accountId, isIncome: input.isIncome, isTransfer: false }, availableAccounts, { requireActiveAccounts: true })) return false;
     const selectedCategory = categories.find((category) => category.id === input.categoryId);
-    if (!selectedCategory || selectedCategory.isArchived || selectedCategory.isIncome !== input.isIncome) return;
+    if (!selectedCategory || selectedCategory.isArchived || selectedCategory.isIncome !== input.isIncome) return false;
 
     const now = new Date();
     const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
     const dateStr = `${now.getDate()} ${months[now.getMonth()]}`;
-
     const newTx: Transaction = {
-      id: Date.now(),
+      id: getAvailableTransactionId(Date.now(), current.value),
       title: selectedCategory.name,
       categoryId: selectedCategory.id,
       category: selectedCategory.name,
@@ -203,34 +275,26 @@ export function useTransactions(
       amount: input.amount,
       date: dateStr,
       dateISO: toLocalISODate(now),
-      accountId: input.accountId?.trim() || MAIN_ACCOUNT_ID,
+      accountId,
       isIncome: input.isIncome,
     };
 
-    setRecord((prev) => {
-      if (!dependenciesHealthy || !canPersistReadStatus(prev.status)) return prev;
-      const id = getAvailableTransactionId(newTx.id, prev.value);
-      return { ...prev, value: [{ ...newTx, id }, ...prev.value] };
-    });
-  }, [categories, dependenciesHealthy]);
+    return commitRecord({ ...current, value: [newTx, ...current.value] });
+  }, [categories, commitRecord, dependenciesHealthy]);
 
-  const addTransfer = useCallback((input: TransferInput) => {
-    const amount = Math.round(input.amount);
+  const addTransfer = useCallback((input: TransferInput, availableAccounts: readonly Account[]): boolean => {
+    const amount = input.amount;
     const fromAccountId = input.fromAccountId.trim();
     const toAccountId = input.toAccountId.trim();
-    if (
-      !Number.isSafeInteger(amount) || amount <= 0 ||
-      !fromAccountId || !toAccountId || fromAccountId === toAccountId
-    ) return;
+    const current = recordRef.current;
+    if (!dependenciesHealthy || !canPersistReadStatus(current.status)) return false;
+    if (getTransactionRuleError({ amount, accountId: fromAccountId, toAccountId, isIncome: false, isTransfer: true }, availableAccounts, { requireActiveAccounts: true })) return false;
 
     const now = new Date();
     const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
     const dateStr = `${now.getDate()} ${months[now.getMonth()]}`;
-    // The update function checks IDs against the latest state, so two updates
-    // batched in the same millisecond still receive distinct identifiers.
-    const preferredId = Date.now();
     const transfer: Transaction = {
-      id: preferredId,
+      id: getAvailableTransactionId(Date.now(), current.value),
       title: 'Перевод между счетами',
       categoryId: null,
       category: 'Перевод',
@@ -244,56 +308,33 @@ export function useTransactions(
       isTransfer: true,
     };
 
-    setRecord((previous) => {
-      if (!dependenciesHealthy || !canPersistReadStatus(previous.status)) return previous;
-      const id = getAvailableTransactionId(transfer.id, previous.value);
-      return { ...previous, value: [{ ...transfer, id }, ...previous.value] };
-    });
-  }, [dependenciesHealthy]);
+    return commitRecord({ ...current, value: [transfer, ...current.value] });
+  }, [commitRecord, dependenciesHealthy]);
 
   const resetTransactions = useCallback(() => {
-    setRecord((prev) => {
-      if (!dependenciesHealthy || !canPersistReadStatus(prev.status)) return prev;
-      return { ...prev, value: [] };
+    const current = recordRef.current;
+    if (!dependenciesHealthy || !canPersistReadStatus(current.status)) return;
+    commitRecord({ ...current, value: [] });
+  }, [commitRecord, dependenciesHealthy]);
+
+  const updateTransaction = useCallback((id: number, updates: TransactionUpdateInput, availableAccounts: readonly Account[]): boolean => {
+    const current = recordRef.current;
+    if (!dependenciesHealthy || !canPersistReadStatus(current.status)) return false;
+    const existing = current.value.find((transaction) => transaction.id === id);
+    if (!existing) return false;
+    const candidate = buildUpdatedTransaction(existing, updates, categories, availableAccounts);
+    if (!candidate) return false;
+    return commitRecord({
+      ...current,
+      value: current.value.map((transaction) => transaction.id === id ? candidate : transaction),
     });
-  }, [dependenciesHealthy]);
-
-  const updateTransaction = useCallback((id: number, updates: TransactionUpdateInput) => {
-    setRecord((prev) => {
-      if (!dependenciesHealthy || !canPersistReadStatus(prev.status)) return prev;
-      return {
-        ...prev,
-        value: prev.value.map((tx) => {
-          if (tx.id !== id) return tx;
-
-          const nextCategoryId = updates.categoryId ?? tx.categoryId;
-          const selectedCategory = nextCategoryId
-            ? categories.find((category) => category.id === nextCategoryId)
-            : undefined;
-
-          if (tx.isTransfer) return tx;
-
-          return {
-            ...tx,
-            amount: updates.amount ?? tx.amount,
-            categoryId: nextCategoryId,
-            category: selectedCategory?.name ?? tx.category,
-            categoryIconName: selectedCategory?.iconName ?? tx.categoryIconName,
-            title: selectedCategory?.name ?? tx.title,
-            isIncome: updates.isIncome ?? tx.isIncome,
-            accountId: updates.accountId?.trim() || tx.accountId || MAIN_ACCOUNT_ID,
-          };
-        }),
-      };
-    });
-  }, [categories, dependenciesHealthy]);
+  }, [categories, commitRecord, dependenciesHealthy]);
 
   const deleteTransaction = useCallback((id: number) => {
-    setRecord((prev) => {
-      if (!dependenciesHealthy || !canPersistReadStatus(prev.status)) return prev;
-      return { ...prev, value: prev.value.filter((tx) => tx.id !== id) };
-    });
-  }, [dependenciesHealthy]);
+    const current = recordRef.current;
+    if (!dependenciesHealthy || !canPersistReadStatus(current.status) || !current.value.some((tx) => tx.id === id)) return;
+    commitRecord({ ...current, value: current.value.filter((tx) => tx.id !== id) });
+  }, [commitRecord, dependenciesHealthy]);
 
   /**
    * Safely reconnects historical rows whose account no longer exists to the
@@ -304,10 +345,10 @@ export function useTransactions(
     const knownIds = new Set(validAccountIds);
     if (!knownIds.has(MAIN_ACCOUNT_ID)) return;
 
-    setRecord((previous) => {
-      if (!dependenciesHealthy || !canPersistReadStatus(previous.status)) return previous;
-      let changed = false;
-      const nextTransactions = previous.value.map((transaction) => {
+    const previous = recordRef.current;
+    if (!dependenciesHealthy || !canPersistReadStatus(previous.status)) return;
+    let changed = false;
+    const nextTransactions = previous.value.map((transaction) => {
         const accountId = transaction.accountId?.trim();
         const resolvedAccountId = accountId && knownIds.has(accountId) ? accountId : MAIN_ACCOUNT_ID;
         if (transaction.isTransfer) {
@@ -324,10 +365,9 @@ export function useTransactions(
         if (resolvedAccountId === accountId) return transaction;
         changed = true;
         return { ...transaction, accountId: resolvedAccountId };
-      });
-      return changed ? { ...previous, value: nextTransactions } : previous;
     });
-  }, [dependenciesHealthy]);
+    if (changed) commitRecord({ ...previous, value: nextTransactions });
+  }, [commitRecord, dependenciesHealthy]);
 
   const storageIssues = [record.issue, writeIssue].filter((issue): issue is StorageIssue => Boolean(issue));
 

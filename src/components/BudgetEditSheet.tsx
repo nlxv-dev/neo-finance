@@ -111,7 +111,7 @@ export function BudgetEditSheet({
               type="button"
               onClick={handleSave}
               disabled={!hasChanges}
-              className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40 disabled:active:scale-100"
+              className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
             >
               <Check className="h-4 w-4" strokeWidth={2.5} />
               {buttonLabel}
@@ -125,7 +125,7 @@ export function BudgetEditSheet({
             type="button"
             onClick={handleSave}
             disabled={!hasChanges}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40 disabled:active:scale-100"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
           >
             <Check className="h-4 w-4" strokeWidth={2.5} />
             {buttonLabel}

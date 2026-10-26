@@ -18,8 +18,8 @@ import type { AccountInput } from '@/hooks/useAccounts';
 import { IconRenderer } from '@/components/IconRenderer';
 import { AnimatedCounter } from '@/components/AnimatedCounter';
 import { AccountEditSheet } from '@/components/AccountEditSheet';
-import { calculateAllAccountBalances, calculateBalancesByCurrency } from '@/utils/financialMath';
-import { filterTransactionsForAccount, summarizeAccountTransactions } from '@/utils/accountAnalytics';
+
+import { filterTransactionsForAccount, summarizeTransactions } from '@/utils/accountAnalytics';
 import { formatISODateShort, resolveTransactionDateISO } from '@/data/transactionDates';
 import { getCurrencySymbol } from '@/utils/currency';
 
@@ -50,6 +50,8 @@ function formatAccountCount(count: number): string {
 interface WalletScreenProps {
   accounts: Account[];
   transactions: Transaction[];
+  accountBalances: Record<string, number>;
+  balancesByCurrency: Record<string, number>;
   categories: CustomCategory[];
   onAddAccount: (input: AccountInput) => void;
   onUpdateAccount: (id: string, updates: Partial<AccountInput>) => void;
@@ -57,12 +59,13 @@ interface WalletScreenProps {
   onRequestTransfer: () => void;
   onSelectTransaction: (transaction: Transaction) => void;
   canWriteAccounts: boolean;
-  fallbackInitialBalance?: number;
 }
 
 export function WalletScreen({
   accounts,
   transactions,
+  accountBalances,
+  balancesByCurrency,
   categories,
   onAddAccount,
   onUpdateAccount,
@@ -70,7 +73,6 @@ export function WalletScreen({
   onRequestTransfer,
   onSelectTransaction,
   canWriteAccounts,
-  fallbackInitialBalance = 0,
 }: WalletScreenProps) {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -84,11 +86,6 @@ export function WalletScreen({
     [archivedAccounts],
   );
   const accountById = useMemo(() => new Map(accounts.map((account) => [account.id, account])), [accounts]);
-  const accountBalances = useMemo(() => calculateAllAccountBalances(accounts, transactions), [accounts, transactions]);
-  const balancesByCurrency = useMemo(
-    () => calculateBalancesByCurrency(accounts, transactions, fallbackInitialBalance),
-    [accounts, transactions, fallbackInitialBalance],
-  );
   const knownAccountIds = useMemo(() => accounts.map((account) => account.id), [accounts]);
   const selectedAccount = selectedAccountId ? accountById.get(selectedAccountId) ?? null : null;
   const selectedTransactions = useMemo(
@@ -96,8 +93,8 @@ export function WalletScreen({
     [selectedAccount, transactions, knownAccountIds],
   );
   const selectedSummary = useMemo(
-    () => selectedAccount ? summarizeAccountTransactions(transactions, selectedAccount.id, knownAccountIds) : null,
-    [selectedAccount, transactions, knownAccountIds],
+    () => selectedAccount ? summarizeTransactions(selectedTransactions) : null,
+    [selectedAccount, selectedTransactions],
   );
   const otherCurrencies = Object.keys(balancesByCurrency)
     .filter((currency) => currency !== 'RUB' && accounts.some((account) => account.currency.toUpperCase() === currency))
@@ -167,7 +164,7 @@ export function WalletScreen({
           </p>
           <div className="mt-1 flex items-baseline gap-1.5">
             <h2 className="text-[clamp(2rem,9vw,2.75rem)] font-light tracking-tight text-neutral-900 dark:text-white tabular-nums">
-              <AnimatedCounter value={balancesByCurrency.RUB ?? fallbackInitialBalance} />
+              <AnimatedCounter value={balancesByCurrency.RUB ?? 0} />
             </h2>
             <span className="text-xl font-light text-neutral-500 dark:text-neutral-400">₽</span>
           </div>

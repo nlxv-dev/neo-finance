@@ -36,14 +36,14 @@ export function DeleteConfirmationPanel({
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 rounded-2xl py-3.5 text-sm font-medium text-neutral-500 dark:text-neutral-400 neu-card-sm transition-all duration-200 active:scale-[0.98] gpu"
+          className="flex-1 rounded-2xl py-3.5 text-sm font-medium text-neutral-500 dark:text-neutral-400 neu-card-sm transition-all duration-200 active:scale-[0.98] "
         >
           Отмена
         </button>
         <button
           type="button"
           onClick={onConfirm}
-          className="flex flex-[2] items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu"
+          className="flex flex-[2] items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] "
           style={{ background: 'rgb(239 68 68)' }}
         >
           <Trash2 className="h-4 w-4" />

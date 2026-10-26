@@ -36,6 +36,9 @@ export const initialTransactions: Transaction[] = [];
 export type BudgetStatus = 'normal' | 'warning' | 'overbudget';
 
 export function getBudgetStatus(spent: number, budget: number): BudgetStatus {
+  // A zero/invalid budget has no meaningful percentage denominator. Treat it as
+  // an unconfigured budget instead of incorrectly displaying an over-budget state.
+  if (!Number.isFinite(spent) || !Number.isFinite(budget) || budget <= 0) return 'normal';
   const pct = (spent / budget) * 100;
   if (pct > 100) return 'overbudget';
   if (pct >= 80) return 'warning';

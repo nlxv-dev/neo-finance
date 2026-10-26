@@ -68,7 +68,8 @@ export function useAccounts(fallbackInitialBalance = 0, dependenciesHealthy = tr
 
   const addAccount = useCallback((input: AccountInput) => {
     const name = input.name.trim();
-    if (!name || (input.initialBalance !== undefined && !Number.isFinite(input.initialBalance))) return;
+    if (!name || name.length > 80 || (input.initialBalance !== undefined && (!Number.isFinite(input.initialBalance) || Math.abs(Math.round(input.initialBalance)) > 1_000_000_000_000))) return;
+    if (input.iconName.length > 100 || (input.color !== undefined && input.color.length > 40)) return;
 
     const newAccount: Account = {
       id: createAccountId(),
@@ -90,7 +91,10 @@ export function useAccounts(fallbackInitialBalance = 0, dependenciesHealthy = tr
   }, [dependenciesHealthy]);
 
   const updateAccount = useCallback((id: string, updates: Partial<AccountInput>) => {
-    if (updates.initialBalance !== undefined && !Number.isFinite(updates.initialBalance)) return;
+    if (updates.initialBalance !== undefined && (!Number.isFinite(updates.initialBalance) || Math.abs(Math.round(updates.initialBalance)) > 1_000_000_000_000)) return;
+    if (updates.name !== undefined && updates.name.trim().length > 80) return;
+    if (updates.iconName !== undefined && updates.iconName.length > 100) return;
+    if (updates.color !== undefined && updates.color.length > 40) return;
     setRecord((previous) => {
       if (!dependenciesHealthy || !canPersistReadStatus(previous.status)) return previous;
       return {

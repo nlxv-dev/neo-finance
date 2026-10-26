@@ -3,6 +3,7 @@ import { createDefaultAccounts, MAIN_ACCOUNT_ID, normalizeStoredAccounts, type A
 import type { CustomCategory } from '@/hooks/useCategories';
 import type { BackgroundStyle, ThemeMode } from '@/hooks/useTheme';
 import { normalizeStoredGoals, type Goal } from '@/data/goals';
+import { getTransactionRuleError, MAX_TRANSACTION_AMOUNT } from '@/data/transactionRules';
 
 // These historical browser-storage keys are intentionally preserved until a separate, tested migration exists.
 export const STORAGE_KEYS = {
@@ -47,7 +48,19 @@ export interface BackupFile {
 
 export type CsvImportMode = 'replace' | 'append';
 
-const CSV_HEADERS = ['id', 'amount', 'type', 'categoryId', 'category', 'categoryIconName', 'date', 'dateISO'];
+const CSV_HEADERS_V1 = ['id', 'amount', 'type', 'categoryId', 'category', 'categoryIconName', 'date', 'dateISO'];
+const CSV_HEADERS_V2 = [...CSV_HEADERS_V1, 'accountId', 'toAccountId'];
+const MAX_IMPORT_TRANSACTIONS = 50_000;
+const MAX_IMPORT_CATEGORIES = 500;
+const MAX_IMPORT_ACCOUNTS = 100;
+const MAX_IMPORT_GOALS = 500;
+const MAX_CSV_CHARACTERS = 50 * 1024 * 1024;
+
+export interface ParsedTransactionsCsv {
+  /** Version 1 is the original eight-column CSV; version 2 includes account and transfer fields. */
+  schemaVersion: 1 | 2;
+  transactions: Transaction[];
+}
 const SAFE_THEME_MODES = new Set<ThemeMode>(['system', 'light', 'dark']);
 const SAFE_BACKGROUND_STYLES = new Set<BackgroundStyle>(['gradient', 'solid']);
 
@@ -73,6 +86,7 @@ function requireFiniteNumber(value: unknown, label: string, options?: { positive
 
 function normalizeCategories(value: unknown): CustomCategory[] {
   if (!Array.isArray(value)) throw new Error('В резервной копии отсутствует список категорий.');
+  if (value.length > MAX_IMPORT_CATEGORIES) throw new Error(`Слишком много категорий. Максимум — ${MAX_IMPORT_CATEGORIES}.`);
   const ids = new Set<string>();
   return value.map((entry, index) => {
     if (!isRecord(entry)) throw new Error(`Категория №${index + 1} имеет неверный формат.`);
@@ -82,10 +96,15 @@ function normalizeCategories(value: unknown): CustomCategory[] {
     }
     if (ids.has(id)) throw new Error(`В резервной копии повторяется ID категории «${id}».`);
     ids.add(id);
+    const name = requireString(entry.name, `название категории №${index + 1}`);
+    const iconName = requireString(entry.iconName, `иконка категории №${index + 1}`);
+    if (id.length > 128 || name.length > 80 || iconName.length > 100) {
+      throw new Error(`Категория №${index + 1} превышает допустимую длину полей.`);
+    }
     return {
       id,
-      name: requireString(entry.name, `название категории №${index + 1}`),
-      iconName: requireString(entry.iconName, `иконка категории №${index + 1}`),
+      name,
+      iconName,
       isIncome: typeof entry.isIncome === 'boolean' ? entry.isIncome : (() => { throw new Error(`Тип категории №${index + 1} указан неверно.`); })(),
       isArchived: entry.isArchived === true,
     };
@@ -94,6 +113,7 @@ function normalizeCategories(value: unknown): CustomCategory[] {
 
 function normalizeTransactions(value: unknown): Transaction[] {
   if (!Array.isArray(value)) throw new Error('В резервной копии отсутствует история транзакций.');
+  if (value.length > MAX_IMPORT_TRANSACTIONS) throw new Error(`Слишком много транзакций. Максимум — ${MAX_IMPORT_TRANSACTIONS}.`);
   const ids = new Set<number>();
   return value.map((entry, index) => {
     if (!isRecord(entry)) throw new Error(`Транзакция №${index + 1} имеет неверный формат.`);
@@ -101,15 +121,30 @@ function normalizeTransactions(value: unknown): Transaction[] {
     if (!Number.isSafeInteger(id)) throw new Error(`ID транзакции №${index + 1} должен быть целым числом.`);
     if (ids.has(id)) throw new Error(`В резервной копии повторяется ID транзакции ${id}.`);
     ids.add(id);
-    const amount = requireFiniteNumber(entry.amount, `сумма транзакции №${index + 1}`, { nonNegative: true });
+    const amount = requireFiniteNumber(entry.amount, `сумма транзакции №${index + 1}`, { positive: true });
+    if (!Number.isSafeInteger(amount) || amount > MAX_TRANSACTION_AMOUNT) throw new Error(`Сумма транзакции №${index + 1} должна быть целым числом рублей не более 1 000 000 000 000.`);
     if (typeof entry.isIncome !== 'boolean') throw new Error(`Тип транзакции №${index + 1} указан неверно.`);
     const categoryId = entry.categoryId === null ? null : requireString(entry.categoryId, `categoryId транзакции №${index + 1}`, true) || null;
     const category = requireString(entry.category, `категория транзакции №${index + 1}`, true);
+    if (entry.title !== undefined && typeof entry.title !== 'string') {
+      throw new Error(`Заголовок транзакции №${index + 1} указан неверно.`);
+    }
+    if (entry.categoryIconName !== undefined && typeof entry.categoryIconName !== 'string') {
+      throw new Error(`Иконка транзакции №${index + 1} указана неверно.`);
+    }
+    if (entry.dateISO !== undefined && entry.dateISO !== null && typeof entry.dateISO !== 'string') {
+      throw new Error(`ISO-дата транзакции №${index + 1} указана неверно.`);
+    }
     const title = typeof entry.title === 'string' ? entry.title : category;
     const categoryIconName = typeof entry.categoryIconName === 'string' && entry.categoryIconName
       ? entry.categoryIconName
       : 'HelpCircle';
     const date = requireString(entry.date, `дата транзакции №${index + 1}`, true);
+    if (category.length > 160 || title.length > 160 || categoryIconName.length > 100 || date.length > 80 ||
+      (typeof entry.categoryId === 'string' && entry.categoryId.length > 128) ||
+      (typeof entry.dateISO === 'string' && entry.dateISO.length > 10)) {
+      throw new Error(`Транзакция №${index + 1} превышает допустимую длину текстовых полей.`);
+    }
     const dateISO = typeof entry.dateISO === 'string' && entry.dateISO ? entry.dateISO : undefined;
     if (entry.accountId !== undefined && entry.accountId !== null && typeof entry.accountId !== 'string') {
       throw new Error(`Счёт транзакции №${index + 1} указан неверно.`);
@@ -125,6 +160,7 @@ function normalizeTransactions(value: unknown): Transaction[] {
       : MAIN_ACCOUNT_ID;
     const isTransfer = entry.isTransfer === true;
     const toAccountId = typeof entry.toAccountId === 'string' ? entry.toAccountId.trim() : '';
+    if (accountId.length > 128 || toAccountId.length > 128) throw new Error(`Счёт транзакции №${index + 1} имеет недопустимый идентификатор.`);
     if (isTransfer && (!toAccountId || toAccountId === accountId || amount <= 0)) {
       throw new Error(`Перевод №${id} должен указывать два разных счёта.`);
     }
@@ -133,10 +169,10 @@ function normalizeTransactions(value: unknown): Transaction[] {
     }
     return {
       id,
-      title,
-      categoryId,
-      category,
-      categoryIconName,
+      title: isTransfer ? 'Перевод между счетами' : title,
+      categoryId: isTransfer ? null : categoryId,
+      category: isTransfer ? 'Перевод' : category,
+      categoryIconName: isTransfer ? 'ArrowLeftRight' : categoryIconName,
       amount,
       date,
       ...(dateISO ? { dateISO } : {}),
@@ -174,11 +210,21 @@ export function validateBackupFile(value: unknown): BackupFile {
     throw new Error('В резервной копии указан неизвестный стиль фона.');
   }
 
+  const rawUserName = requireString(data.profile.userName, 'имя профиля', true) || 'Пользователь';
+  if (rawUserName.length > 80) throw new Error('Имя профиля превышает допустимую длину 80 символов.');
+  const initialBalance = Math.round(requireFiniteNumber(data.profile.initialBalance, 'начальный баланс'));
+  if (!Number.isSafeInteger(initialBalance) || Math.abs(initialBalance) > MAX_TRANSACTION_AMOUNT) {
+    throw new Error('Начальный баланс превышает допустимый предел 1 000 000 000 000 ₽.');
+  }
+  const monthlyBudget = Math.round(requireFiniteNumber(data.profile.monthlyBudget, 'месячный бюджет', { positive: true }));
+  if (!Number.isSafeInteger(monthlyBudget) || monthlyBudget <= 0 || monthlyBudget > MAX_TRANSACTION_AMOUNT) {
+    throw new Error('Месячный бюджет должен быть целым положительным числом не более 1 000 000 000 000 ₽.');
+  }
   const profile = {
-    userName: requireString(data.profile.userName, 'имя профиля', true) || 'Пользователь',
-    // Negative balances are valid (overdraft/debt), so only finiteness is required.
-    initialBalance: requireFiniteNumber(data.profile.initialBalance, 'начальный баланс'),
-    monthlyBudget: requireFiniteNumber(data.profile.monthlyBudget, 'месячный бюджет', { positive: true }),
+    userName: rawUserName,
+    // Negative balances are valid (overdraft/debt), while amounts remain whole rubles.
+    initialBalance,
+    monthlyBudget,
   };
 
   let transactions = normalizeTransactions(data.transactions);
@@ -194,6 +240,9 @@ export function validateBackupFile(value: unknown): BackupFile {
     accounts = createDefaultAccounts(profile.initialBalance);
     transactions = transactions.map((transaction) => ({ ...transaction, accountId: MAIN_ACCOUNT_ID }));
   } else {
+    if (!Array.isArray(data.accounts) || data.accounts.length > MAX_IMPORT_ACCOUNTS) {
+      throw new Error(`Список счетов отсутствует, повреждён или превышает лимит ${MAX_IMPORT_ACCOUNTS}.`);
+    }
     const normalizedAccounts = normalizeStoredAccounts(data.accounts);
     if (!normalizedAccounts) {
       throw new Error('В резервной копии отсутствует список счетов или он повреждён. Исходные данные не изменены.');
@@ -205,25 +254,30 @@ export function validateBackupFile(value: unknown): BackupFile {
     // The account model is canonical in schema 2; mirror its opening balance to
     // the historical profile field for older app versions and future compatibility.
     profile.initialBalance = mainAccount.initialBalance;
-    const accountIds = new Set(normalizedAccounts.map((account) => account.id));
-    const accountById = new Map(normalizedAccounts.map((account) => [account.id, account]));
-    const orphanedTransaction = transactions.find((transaction) => {
-      if (!accountIds.has(transaction.accountId ?? MAIN_ACCOUNT_ID)) return true;
-      if (!transaction.isTransfer) return false;
-      const destination = transaction.toAccountId ? accountById.get(transaction.toAccountId) : undefined;
-      const source = accountById.get(transaction.accountId ?? MAIN_ACCOUNT_ID);
-      return !destination || !source || source.id === destination.id || source.currency.toUpperCase() !== destination.currency.toUpperCase();
-    });
-    if (orphanedTransaction) {
-      throw new Error(`Транзакция №${orphanedTransaction.id} ссылается на неверный счёт или переводит между разными валютами. Исходные данные не изменены.`);
-    }
     accounts = normalizedAccounts;
+  }
+
+  const accountRuleFailure = transactions.find((transaction) => getTransactionRuleError(transaction, accounts));
+  if (accountRuleFailure) {
+    throw new Error(`Транзакция №${accountRuleFailure.id}: ${getTransactionRuleError(accountRuleFailure, accounts)} Исходные данные не изменены.`);
+  }
+
+  const normalizedCategories = normalizeCategories(data.categories);
+  for (const transaction of transactions) {
+    if (transaction.isTransfer || !transaction.categoryId) continue;
+    const linkedCategory = normalizedCategories.find((category) => category.id === transaction.categoryId);
+    if (linkedCategory && linkedCategory.isIncome !== transaction.isIncome) {
+      throw new Error(`Транзакция №${transaction.id} имеет тип, не соответствующий её категории. Исходные данные не изменены.`);
+    }
   }
 
   // Goals were introduced in schema 4. Older backups intentionally restore an
   // empty goal tracker instead of retaining stale goals from the device.
   let goals: Goal[] = [];
   if (sourceSchemaVersion >= 4) {
+    if (!Array.isArray(data.goals) || data.goals.length > MAX_IMPORT_GOALS) {
+      throw new Error(`Список целей отсутствует, повреждён или превышает лимит ${MAX_IMPORT_GOALS}.`);
+    }
     const normalizedGoals = normalizeStoredGoals(data.goals);
     if (!normalizedGoals) {
       throw new Error('В резервной копии отсутствует список целей или он повреждён. Исходные данные не изменены.');
@@ -241,7 +295,7 @@ export function validateBackupFile(value: unknown): BackupFile {
       accounts,
       goals,
       transactions,
-      categories: normalizeCategories(data.categories),
+      categories: normalizedCategories,
       profile,
       settings: { themeMode: themeMode as ThemeMode, backgroundStyle: backgroundStyle as BackgroundStyle },
     },
@@ -293,20 +347,26 @@ function csvCell(value: string | number): string {
 }
 
 export function createTransactionsCsv(transactions: Transaction[]): string {
-  // The stable CSV schema only represents income/expense rows. Transfers remain
-  // losslessly available in JSON backups, where both account endpoints are stored.
-  const rows = [CSV_HEADERS, ...transactions.filter((transaction) => !transaction.isTransfer).map((transaction) => [
+  // Schema 2 is transaction-complete: account references and both endpoints of
+  // internal transfers are preserved. Account definitions/settings still belong
+  // in JSON backups, so imports validate that referenced accounts already exist.
+  const rows = [CSV_HEADERS_V2, ...transactions.map((transaction) => [
     String(transaction.id),
     String(transaction.amount),
-    transaction.isIncome ? 'income' : 'expense',
-    transaction.categoryId ?? '',
-    transaction.category,
-    transaction.categoryIconName || 'HelpCircle',
+    transaction.isTransfer ? 'transfer' : transaction.isIncome ? 'income' : 'expense',
+    transaction.isTransfer ? '' : transaction.categoryId ?? '',
+    transaction.isTransfer ? 'Перевод' : transaction.category,
+    transaction.isTransfer ? 'ArrowLeftRight' : transaction.categoryIconName || 'HelpCircle',
     transaction.date,
     transaction.dateISO ?? '',
+    transaction.accountId?.trim() || MAIN_ACCOUNT_ID,
+    transaction.isTransfer ? transaction.toAccountId?.trim() ?? '' : '',
   ])];
   return `\uFEFF${rows.map((row, rowIndex) => row.map((cell, columnIndex) => {
-    const isUserControlledText = rowIndex > 0 && columnIndex >= 4;
+    // Every string-shaped data field is protected, including account/category IDs
+    // that may originate in an imported CSV. Numeric cells and the closed type
+    // enum are safe by construction.
+    const isUserControlledText = rowIndex > 0 && (columnIndex === 3 || (columnIndex >= 4 && columnIndex <= 9));
     const value = isUserControlledText ? protectSpreadsheetFormula(cell) : cell;
     return csvCell(value);
   }).join(',')).join('\r\n')}\r\n`;
@@ -381,53 +441,76 @@ function unprotectSpreadsheetFormula(value: string): string {
   return value.startsWith("'") && /^[\s]*[=+\-@]/.test(value.slice(1)) ? value.slice(1) : value;
 }
 
-export function parseTransactionsCsv(source: string): Transaction[] {
+export function parseTransactionsCsv(source: string): ParsedTransactionsCsv {
+  if (source.length > MAX_CSV_CHARACTERS) throw new Error('CSV-файл слишком большой. Максимальный размер — 50 МБ.');
   const parsedCsv = parseCsvRows(source);
   const { rows, delimiter } = parsedCsv;
   if (rows.length === 0) throw new Error('CSV-файл пустой.');
+  if (rows.length - 1 > MAX_IMPORT_TRANSACTIONS) throw new Error(`Слишком много строк CSV. Максимум — ${MAX_IMPORT_TRANSACTIONS} транзакций.`);
   const headers = rows[0].map((header) => header.trim());
-  if (headers.length !== CSV_HEADERS.length || CSV_HEADERS.some((header, index) => headers[index] !== header)) {
-    throw new Error('Неизвестная структура CSV. Используйте CSV-экспорт Neo Finance с исходными заголовками.');
+  const isV1 = headers.length === CSV_HEADERS_V1.length && CSV_HEADERS_V1.every((header, index) => headers[index] === header);
+  const isV2 = headers.length === CSV_HEADERS_V2.length && CSV_HEADERS_V2.every((header, index) => headers[index] === header);
+  if (!isV1 && !isV2) {
+    throw new Error('Неизвестная структура CSV. Поддерживаются старый формат Neo Finance и расширенный формат v2.');
   }
-  if (rows.length === 1) return [];
+  const schemaVersion: 1 | 2 = isV2 ? 2 : 1;
+  if (rows.length === 1) return { schemaVersion, transactions: [] };
 
   const result: Transaction[] = [];
   const seenIds = new Set<number>();
   for (let index = 1; index < rows.length; index += 1) {
     const cells = rows[index];
-    if (cells.length !== CSV_HEADERS.length) throw new Error(`В CSV строка ${index + 1} содержит неверное количество столбцов.`);
+    const expectedColumns = schemaVersion === 1 ? CSV_HEADERS_V1.length : CSV_HEADERS_V2.length;
+    if (cells.length !== expectedColumns) throw new Error(`В CSV строка ${index + 1} содержит неверное количество столбцов.`);
     const [idText, amountText, typeText, categoryIdText, categoryText, iconText, dateText, dateISOText] = cells;
+    const accountIdText = schemaVersion === 2 ? unprotectSpreadsheetFormula(cells[8]).trim() : MAIN_ACCOUNT_ID;
+    const toAccountIdText = schemaVersion === 2 ? unprotectSpreadsheetFormula(cells[9]).trim() : '';
+    const safeCategoryIdText = unprotectSpreadsheetFormula(categoryIdText).trim();
     const id = Number(idText);
     const normalizedAmount = delimiter === ';' && amountText.includes(',') && !amountText.includes('.')
       ? amountText.trim().replace(/\s/g, '').replace(',', '.')
       : amountText.trim().replace(/\s/g, '');
     const amount = Number(normalizedAmount);
     if (!Number.isSafeInteger(id) || id < 0) throw new Error(`В CSV строка ${index + 1}: неверный ID транзакции.`);
-    if (!Number.isFinite(amount) || amount <= 0) throw new Error(`В CSV строка ${index + 1}: сумма должна быть положительным числом.`);
-    if (typeText !== 'income' && typeText !== 'expense') throw new Error(`В CSV строка ${index + 1}: тип должен быть income или expense.`);
+    if (!Number.isSafeInteger(amount) || amount <= 0 || amount > MAX_TRANSACTION_AMOUNT) throw new Error(`В CSV строка ${index + 1}: сумма должна быть положительным целым числом рублей не более 1 000 000 000 000.`);
+    if (typeText !== 'income' && typeText !== 'expense' && !(schemaVersion === 2 && typeText === 'transfer')) {
+      throw new Error(`В CSV строка ${index + 1}: неизвестный тип операции.`);
+    }
     if (!dateText.trim()) throw new Error(`В CSV строка ${index + 1}: отсутствует дата.`);
+    if (safeCategoryIdText.length > 128 || categoryText.length > 160 || iconText.length > 100 || dateText.length > 80 || dateISOText.length > 10) {
+      throw new Error(`В CSV строка ${index + 1}: одно из текстовых полей превышает допустимую длину.`);
+    }
     if (seenIds.has(id)) throw new Error(`В CSV повторяется ID транзакции ${id}.`);
+    if (schemaVersion === 2 && (!accountIdText || accountIdText.length > 128 || toAccountIdText.length > 128)) {
+      throw new Error(`В CSV строка ${index + 1}: отсутствует или неверен идентификатор счёта.`);
+    }
+    const isTransfer = typeText === 'transfer';
+    if (isTransfer && (!toAccountIdText || toAccountIdText === accountIdText)) {
+      throw new Error(`В CSV строка ${index + 1}: перевод должен содержать два разных счёта.`);
+    }
+    if (!isTransfer && toAccountIdText) throw new Error(`В CSV строка ${index + 1}: у обычной операции не должно быть счёта назначения.`);
     seenIds.add(id);
-    const category = unprotectSpreadsheetFormula(categoryText);
-    const categoryIconName = unprotectSpreadsheetFormula(iconText) || 'HelpCircle';
+    const category = isTransfer ? 'Перевод' : unprotectSpreadsheetFormula(categoryText);
+    const categoryIconName = isTransfer ? 'ArrowLeftRight' : unprotectSpreadsheetFormula(iconText) || 'HelpCircle';
     const date = unprotectSpreadsheetFormula(dateText);
     const dateISO = unprotectSpreadsheetFormula(dateISOText);
-    const title = category || 'Без категории';
+    const title = isTransfer ? 'Перевод между счетами' : category || 'Без категории';
     result.push({
       id,
       title,
-      categoryId: categoryIdText.trim() || null,
+      categoryId: isTransfer ? null : safeCategoryIdText || null,
       category,
       categoryIconName,
       amount,
       date,
       ...(dateISO.trim() ? { dateISO: dateISO.trim() } : {}),
-      accountId: MAIN_ACCOUNT_ID,
-      isIncome: typeText === 'income',
+      accountId: accountIdText,
+      ...(isTransfer ? { isTransfer: true, toAccountId: toAccountIdText } : {}),
+      isIncome: !isTransfer && typeText === 'income',
     });
   }
   if (result.length === 0) throw new Error('CSV-файл не содержит транзакций.');
-  return result;
+  return { schemaVersion, transactions: result };
 }
 
 function readStorageSnapshot(keys: string[]): Map<string, string | null> {
@@ -482,6 +565,10 @@ function createImportCategories(imported: Transaction[], existing: CustomCategor
   const categories = [...existing];
   const remap = new Map<string, CustomCategory>();
   const mappedTransactions = imported.map((transaction, index) => {
+    if (transaction.isTransfer) {
+      return { ...transaction, categoryId: null, category: 'Перевод', title: 'Перевод между счетами', categoryIconName: 'ArrowLeftRight', isIncome: false };
+    }
+
     const key = `${transaction.categoryId ?? ''}::${transaction.isIncome ? 'income' : 'expense'}::${transaction.category}`;
     let category = remap.get(key);
     if (!category) {
@@ -523,8 +610,30 @@ export function importCsvTransactionsToStorage(
   importedTransactions: Transaction[],
   existingTransactions: Transaction[],
   existingCategories: CustomCategory[],
-  mode: CsvImportMode
+  mode: CsvImportMode,
+  availableAccounts: readonly Account[],
+  csvSchemaVersion: 1 | 2,
 ): { importedCount: number; skippedCount: number } {
+  if (importedTransactions.length > MAX_IMPORT_TRANSACTIONS) {
+    throw new Error(`Слишком много транзакций. Максимум — ${MAX_IMPORT_TRANSACTIONS}.`);
+  }
+  const importedIds = new Set<number>();
+  for (const transaction of importedTransactions) {
+    if (!Number.isSafeInteger(transaction.id) || transaction.id < 0 || importedIds.has(transaction.id)) {
+      throw new Error(`CSV содержит повторяющийся или неверный ID транзакции: ${transaction.id}. Исходные данные не изменены.`);
+    }
+    importedIds.add(transaction.id);
+  }
+  for (const transaction of importedTransactions) {
+    const ruleError = getTransactionRuleError(transaction, availableAccounts);
+    if (ruleError) {
+      const context = !availableAccounts.some((account) => account.id === (transaction.accountId || MAIN_ACCOUNT_ID))
+        ? ' Для полного переноса между устройствами используйте JSON-бэкап или сначала создайте соответствующие счета.'
+        : '';
+      throw new Error(`CSV содержит некорректную транзакцию №${transaction.id}: ${ruleError}${context} Исходные данные не изменены.`);
+    }
+  }
+
   let skippedCount = 0;
   let sourceTransactions = importedTransactions;
   if (mode === 'append') {
@@ -541,13 +650,10 @@ export function importCsvTransactionsToStorage(
   }
 
   const mapped = createImportCategories(sourceTransactions, existingCategories);
-  // The existing CSV columns cannot represent a transfer's destination. A CSV
-  // replace therefore replaces the income/expense history but preserves internal
-  // transfers instead of silently deleting data that was not present in the file.
-  // A CSV from another backup can reuse a transfer's numeric ID, so only a real
-  // collision causes the preserved transfer ID to be reassigned.
   let transactions: Transaction[];
-  if (mode === 'replace') {
+  if (mode === 'replace' && csvSchemaVersion === 1) {
+    // Legacy eight-column CSV cannot express account assignments or transfers.
+    // Retain current transfers on replace so an older file cannot erase them.
     const existingTransfers = existingTransactions.filter((transaction) => transaction.isTransfer);
     let nextAvailableId = Date.now();
     const usedIds = new Set(mapped.transactions.map((transaction) => transaction.id));
@@ -562,6 +668,9 @@ export function importCsvTransactionsToStorage(
       return id === transaction.id ? transaction : { ...transaction, id };
     });
     transactions = [...mapped.transactions, ...preservedTransfers];
+  } else if (mode === 'replace') {
+    // Schema 2 fully represents the transaction set; replace really replaces all rows.
+    transactions = mapped.transactions;
   } else {
     transactions = [...mapped.transactions, ...existingTransactions];
   }

@@ -114,7 +114,7 @@ export function BalanceAdjustSheet({
             type="button"
             onClick={() => setIsNegative((value) => !value)}
             aria-pressed={isNegative}
-            className={`${keyboardOpen ? 'mt-2' : 'mt-3'} flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-all duration-200 active:scale-95 gpu ${
+            className={`${keyboardOpen ? 'mt-2' : 'mt-3'} flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-all duration-200 active:scale-95 ${
               isNegative
                 ? 'bg-red-500/10 text-red-500 dark:text-red-400'
                 : 'neu-inset text-neutral-400 dark:text-neutral-500'
@@ -160,7 +160,7 @@ export function BalanceAdjustSheet({
               type="button"
               onClick={handleSave}
               disabled={difference === 0}
-              className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40 disabled:active:scale-100"
+              className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
             >
               <Check className="h-4 w-4" strokeWidth={2.5} />
               {difference === 0 ? 'Нет изменений' : 'Применить'}
@@ -174,7 +174,7 @@ export function BalanceAdjustSheet({
             type="button"
             onClick={handleSave}
             disabled={difference === 0}
-            className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40 disabled:active:scale-100"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
           >
             <Check className="h-4 w-4" strokeWidth={2.5} />
             {difference === 0 ? 'Нет изменений' : 'Применить'}

@@ -94,34 +94,62 @@ export function calculateAccountBalance(
   return roundMoney(balance);
 }
 
-/** Calculates a balance for every account, including archived accounts. */
+/** Calculates a balance for every account, including archived accounts, in one transaction pass. */
 export function calculateAllAccountBalances(
   accounts: readonly Account[],
   transactions: readonly AccountTransaction[],
 ): Record<string, number> {
   const primaryAccountId = getPrimaryAccountId(accounts);
-  const accountIds = new Set(accounts.map((account) => account.id));
-  const reconciledTransactions = transactions.map((transaction) => {
-    const accountId = transaction.accountId?.trim();
-    const resolvedAccountId = accountId && accountIds.has(accountId) ? accountId : primaryAccountId;
-    if (transaction.isTransfer) {
-      const toAccountId = transaction.toAccountId?.trim();
-      const resolvedToAccountId = toAccountId && accountIds.has(toAccountId) ? toAccountId : primaryAccountId;
-      return resolvedAccountId === accountId && resolvedToAccountId === toAccountId
-        ? transaction
-        : { ...transaction, accountId: resolvedAccountId, toAccountId: resolvedToAccountId };
-    }
-    // Never let an orphaned account reference make a transaction disappear from
-    // the user's total. Until it can be resolved, keep it in the stable main bucket.
-    return resolvedAccountId === accountId ? transaction : { ...transaction, accountId: resolvedAccountId };
-  });
+  const knownAccountIds = new Set(accounts.map((account) => account.id));
   const balances: Record<string, number> = {};
 
   for (const account of accounts) {
-    balances[account.id] = calculateAccountBalance(account, reconciledTransactions, primaryAccountId);
+    balances[account.id] = roundMoney(account.initialBalance);
+  }
+
+  // Aggregate in one pass rather than rescanning the full history for each account.
+  for (const transaction of transactions) {
+    if (!Number.isFinite(transaction.amount)) continue;
+
+    const storedSourceId = transaction.accountId?.trim();
+    const sourceId = storedSourceId && knownAccountIds.has(storedSourceId)
+      ? storedSourceId
+      : primaryAccountId;
+    const amount = roundMoney(transaction.amount);
+
+    if (transaction.isTransfer) {
+      const storedDestinationId = transaction.toAccountId?.trim();
+      const destinationId = storedDestinationId && knownAccountIds.has(storedDestinationId)
+        ? storedDestinationId
+        : primaryAccountId;
+      if (knownAccountIds.has(sourceId)) balances[sourceId] -= amount;
+      if (knownAccountIds.has(destinationId)) balances[destinationId] += amount;
+      continue;
+    }
+
+    if (knownAccountIds.has(sourceId)) {
+      balances[sourceId] += transaction.isIncome ? amount : -amount;
+    }
+  }
+
+  for (const accountId of Object.keys(balances)) {
+    balances[accountId] = roundMoney(balances[accountId]);
   }
 
   return balances;
+}
+
+/** Groups precomputed account balances by currency without repeating transaction math. */
+export function sumAccountBalancesByCurrency(
+  accounts: readonly Account[],
+  accountBalances: Readonly<Record<string, number>>,
+): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const account of accounts) {
+    const currency = account.currency.trim().toUpperCase() || DEFAULT_ACCOUNT_CURRENCY;
+    totals[currency] = roundMoney((totals[currency] ?? 0) + (accountBalances[account.id] ?? account.initialBalance));
+  }
+  return totals;
 }
 
 /**
@@ -150,13 +178,7 @@ export function calculateBalancesByCurrency(
     };
   }
 
-  const accountBalances = calculateAllAccountBalances(accounts, transactions);
-  const totals: Record<string, number> = {};
-  for (const account of accounts) {
-    const currency = account.currency.trim().toUpperCase() || DEFAULT_ACCOUNT_CURRENCY;
-    totals[currency] = roundMoney((totals[currency] ?? 0) + (accountBalances[account.id] ?? 0));
-  }
-  return totals;
+  return sumAccountBalancesByCurrency(accounts, calculateAllAccountBalances(accounts, transactions));
 }
 
 /**

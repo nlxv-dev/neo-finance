@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AddTransactionSheet from '@/components/AddTransactionSheet';
 import { BalanceAdjustSheet } from '@/components/BalanceAdjustSheet';
 import { AccountEditSheet } from '@/components/AccountEditSheet';
@@ -22,11 +22,18 @@ import { useProfile } from '@/hooks/useProfile';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactions } from '@/hooks/useTransactions';
 import { useGoals } from '@/hooks/useGoals';
-import { calculateAccountOpeningBalanceForTargetBalance, calculateAllAccountBalances } from '@/utils/financialMath';
+import { calculateAccountOpeningBalanceForTargetBalance, calculateAllAccountBalances, calculateBalancesByCurrency, sumAccountBalancesByCurrency } from '@/utils/financialMath';
 import { filterTransactionsForCurrency, getOtherCurrencyCodes } from '@/utils/accountAnalytics';
 import { downloadRecoverySnapshot, requestPersistentStorage } from '@/storage/safeLocalStorage';
 
 type ActiveSheet = 'add' | 'detail' | 'transfer' | 'profile' | 'budget' | 'balance' | 'account-add' | null;
+
+// Keep visited screens mounted without letting unrelated App state updates
+// force every screen and its transaction list to re-render.
+const MemoizedHomeScreen = memo(HomeScreen);
+const MemoizedStatisticsScreen = memo(StatisticsScreen);
+const MemoizedWalletScreen = memo(WalletScreen);
+const MemoizedGoalsScreen = memo(GoalsScreen);
 
 function App() {
   const { themeMode, setThemeMode, backgroundStyle, setBackgroundStyle } = useTheme();
@@ -36,10 +43,11 @@ function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState<AppTab>('home');
+  const [visitedTabs, setVisitedTabs] = useState<Set<AppTab>>(() => new Set(['home']));
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const settingsOpenerRef = useRef<HTMLElement | null>(null);
   const [selectedTransactionId, setSelectedTransactionId] = useState<Transaction['id'] | null>(null);
-  const [activeHomeCardKey, setActiveHomeCardKey] = useState<string>(MAIN_ACCOUNT_ID);
   const [balanceEditorAccountId, setBalanceEditorAccountId] = useState<string>(MAIN_ACCOUNT_ID);
 
   const {
@@ -124,6 +132,12 @@ function App() {
     () => calculateAllAccountBalances(accounts, transactions),
     [accounts, transactions]
   );
+  const balancesByCurrency = useMemo(
+    () => accounts.length > 0
+      ? sumAccountBalancesByCurrency(accounts, accountBalances)
+      : calculateBalancesByCurrency(accounts, transactions, mainAccountInitialBalance),
+    [accounts, accountBalances, transactions, mainAccountInitialBalance],
+  );
   const balanceEditorAccount = accounts.find((account) => account.id === balanceEditorAccountId) ?? mainAccount;
   const balanceEditorCurrentBalance = balanceEditorAccount
     ? (accountBalances[balanceEditorAccount.id] ?? balanceEditorAccount.initialBalance)
@@ -144,10 +158,13 @@ function App() {
   );
 
   const closeSheet = useCallback(() => setActiveSheet(null), []);
+  const openAddAccountSheet = useCallback(() => setActiveSheet('account-add'), []);
+  const openBudgetSheet = useCallback(() => setActiveSheet('budget'), []);
+  const openTransferSheet = useCallback(() => setActiveSheet('transfer'), []);
+  const openAddTransactionSheet = useCallback(() => setActiveSheet('add'), []);
 
   const handleAddAccount = useCallback((input: AccountInput) => {
-    const createdAccount = addAccount(input);
-    if (createdAccount) setActiveHomeCardKey(createdAccount.id);
+    addAccount(input);
   }, [addAccount]);
 
   const handleOpenBalanceAdjust = useCallback((accountId: string) => {
@@ -169,50 +186,44 @@ function App() {
   }, [accounts, transactions, categories, goals, userName, mainAccountInitialBalance, monthlyBudget, storageIssues]);
 
   const handleSaveTransaction = useCallback(
-    (data: { amount: number; categoryId: string; isIncome: boolean; accountId: string }) => {
-      const targetAccountId = transactionAccounts.some((account) => account.id === data.accountId)
-        ? data.accountId
-        : MAIN_ACCOUNT_ID;
-      addTransaction({ ...data, accountId: targetAccountId });
-      closeSheet();
+    (data: { amount: number; categoryId: string; isIncome: boolean; accountId: string }): boolean => {
+      if (!transactionAccounts.some((account) => account.id === data.accountId)) return false;
+      return addTransaction(data, accounts);
     },
-    [addTransaction, closeSheet, transactionAccounts]
+    [addTransaction, accounts, transactionAccounts]
   );
 
   const handleSaveTransfer = useCallback((draft: TransferDraft): boolean => {
     if (!canWriteAccounts || hasUnreadableTransactions) return false;
-    const source = accounts.find((account) => account.id === draft.fromAccountId && !account.isArchived);
-    const destination = accounts.find((account) => account.id === draft.toAccountId && !account.isArchived);
-    if (
-      !source || !destination || source.id === destination.id ||
-      source.currency.toUpperCase() !== destination.currency.toUpperCase() ||
-      !Number.isSafeInteger(draft.amount) || draft.amount <= 0
-    ) return false;
-    addTransfer(draft);
-    return true;
+    // The transaction domain validates account existence, archival state, currency,
+    // and amount in one place for every caller.
+    return addTransfer(draft, accounts);
   }, [accounts, addTransfer, canWriteAccounts, hasUnreadableTransactions]);
-
-  const handleUpdateAccount = useCallback(
-    (id: string, updates: Partial<AccountInput>) => {
-      updateAccount(id, updates);
-      // Keep the historic profile opening-balance key in sync when the main
-      // account is edited from Wallet, not only from the balance sheet.
-      if (id === MAIN_ACCOUNT_ID && updates.initialBalance !== undefined && Number.isFinite(updates.initialBalance)) {
-        updateInitialBalance(Math.round(updates.initialBalance));
-      }
-    },
-    [updateAccount, updateInitialBalance]
-  );
 
   const handleSetMainOpeningBalance = useCallback(
     (openingBalance: number) => {
       if (!canWriteAccounts || !Number.isFinite(openingBalance)) return;
       const normalizedOpeningBalance = Math.round(openingBalance);
+      if (!Number.isSafeInteger(normalizedOpeningBalance) || Math.abs(normalizedOpeningBalance) > 1_000_000_000_000) return;
       updateAccount(MAIN_ACCOUNT_ID, { initialBalance: normalizedOpeningBalance });
-      // Keep the historical profile key synchronized for old backups and compatibility.
+      // Keep the historical profile key synchronized through this single entry
+      // point until the legacy profile field is removed in a separately tested migration.
       updateInitialBalance(normalizedOpeningBalance);
     },
     [canWriteAccounts, updateAccount, updateInitialBalance]
+  );
+
+  const handleUpdateAccount = useCallback(
+    (id: string, updates: Partial<AccountInput>) => {
+      if (id === MAIN_ACCOUNT_ID && updates.initialBalance !== undefined) {
+        const { initialBalance: nextOpeningBalance, ...otherUpdates } = updates;
+        handleSetMainOpeningBalance(nextOpeningBalance);
+        if (Object.keys(otherUpdates).length > 0) updateAccount(id, otherUpdates);
+        return;
+      }
+      updateAccount(id, updates);
+    },
+    [handleSetMainOpeningBalance, updateAccount]
   );
 
   const handleBalanceAdjust = useCallback(
@@ -226,23 +237,16 @@ function App() {
         transactions,
         targetBalance,
       );
-      updateAccount(targetAccount.id, { initialBalance: nextOpeningBalance });
-      if (targetAccount.id === MAIN_ACCOUNT_ID) updateInitialBalance(nextOpeningBalance);
+      if (targetAccount.id === MAIN_ACCOUNT_ID) handleSetMainOpeningBalance(nextOpeningBalance);
+      else updateAccount(targetAccount.id, { initialBalance: nextOpeningBalance });
     },
-    [canWriteAccounts, balanceEditorAccountId, accounts, transactions, updateAccount, updateInitialBalance]
+    [canWriteAccounts, balanceEditorAccountId, accounts, transactions, handleSetMainOpeningBalance, updateAccount]
   );
 
   const handleUpdateTransaction = useCallback(
-    (id: number, updates: { amount: number; categoryId: string; isIncome: boolean; accountId: string }) => {
-      const currentTransaction = transactions.find((transaction) => transaction.id === id);
-      const currentAccount = accounts.find((account) => account.id === (currentTransaction?.accountId ?? MAIN_ACCOUNT_ID));
-      const nextAccount = accounts.find((account) => account.id === updates.accountId);
-      const safeAccountId = nextAccount && currentAccount && nextAccount.currency === currentAccount.currency
-        ? nextAccount.id
-        : currentTransaction?.accountId ?? MAIN_ACCOUNT_ID;
-      updateTransaction(id, { ...updates, accountId: safeAccountId });
-    },
-    [updateTransaction, transactions, accounts]
+    (id: number, updates: { amount: number; categoryId: string; isIncome: boolean; accountId: string }): boolean =>
+      updateTransaction(id, updates, accounts),
+    [updateTransaction, accounts]
   );
 
   const handleDeleteCategory = useCallback(
@@ -269,11 +273,135 @@ function App() {
     setSelectedTransactionId(null);
   }, []);
 
+  const handleTabChange = useCallback((tab: AppTab) => {
+    setVisitedTabs((previous) => {
+      if (previous.has(tab)) return previous;
+      const next = new Set(previous);
+      next.add(tab);
+      return next;
+    });
+    setActiveTab(tab);
+  }, []);
+
+  const handleOpenSettings = useCallback(() => {
+    const activeElement = document.activeElement;
+    settingsOpenerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+    if (activeElement instanceof HTMLElement && activeElement !== document.body) activeElement.blur();
+    setIsSettingsOpen(true);
+  }, []);
+
+  const handleCloseSettings = useCallback(() => {
+    setIsSettingsOpen(false);
+    window.requestAnimationFrame(() => {
+      const opener = settingsOpenerRef.current;
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
+    });
+  }, []);
+
   return (
     <div className="relative min-h-screen bg-transparent text-neutral-900 transition-colors duration-300 dark:text-white">
-      {isSettingsOpen ? (
+      <div hidden={isSettingsOpen} aria-hidden={isSettingsOpen}>
+        <div className="relative mx-auto h-[100dvh] max-w-md overflow-hidden">
+          <section
+            hidden={activeTab !== 'home'}
+            aria-hidden={activeTab !== 'home'}
+            aria-label="Главная"
+            className="absolute inset-0 overflow-y-auto overscroll-contain no-scrollbar pb-32"
+          >
+            <MemoizedHomeScreen
+              userName={userName}
+              monthLabel={monthLabel}
+              currentMonthKey={currentMonthKey}
+              monthlyExpenses={budget.monthlyExpenses}
+              monthlyBudget={monthlyBudget}
+              safeToSpend={budget.safeToSpend}
+              transactions={transactions}
+              accounts={accounts}
+              accountBalances={accountBalances}
+              canWriteAccounts={canWriteAccounts}
+              categories={categories}
+              onOpenSettings={handleOpenSettings}
+              onOpenBalance={handleOpenBalanceAdjust}
+              onAddAccount={openAddAccountSheet}
+              onOpenBudget={openBudgetSheet}
+              onSelectTransaction={handleSelectTransaction}
+            />
+          </section>
+
+          {visitedTabs.has('stats') && (
+            <section
+              hidden={activeTab !== 'stats'}
+              aria-hidden={activeTab !== 'stats'}
+              aria-label="Статистика"
+              className="absolute inset-0 overflow-y-auto overscroll-contain no-scrollbar pb-32"
+            >
+              <MemoizedStatisticsScreen
+                transactions={rubTransactions}
+                categories={categories}
+                otherCurrencyCodes={otherCurrencyCodes}
+                onSelectTransaction={handleSelectTransaction}
+              />
+            </section>
+          )}
+
+          {visitedTabs.has('wallet') && (
+            <section
+              hidden={activeTab !== 'wallet'}
+              aria-hidden={activeTab !== 'wallet'}
+              aria-label="Кошелёк"
+              className="absolute inset-0 overflow-y-auto overscroll-contain no-scrollbar pb-32"
+            >
+              <MemoizedWalletScreen
+                accounts={accounts}
+                transactions={transactions}
+                accountBalances={accountBalances}
+                balancesByCurrency={balancesByCurrency}
+                categories={categories}
+                onAddAccount={handleAddAccount}
+                onUpdateAccount={handleUpdateAccount}
+                onSetAccountArchived={setAccountArchived}
+                onRequestTransfer={openTransferSheet}
+                onSelectTransaction={handleSelectTransaction}
+                canWriteAccounts={canWriteAccounts}
+              />
+            </section>
+          )}
+
+          {visitedTabs.has('goals') && (
+            <section
+              hidden={activeTab !== 'goals'}
+              aria-hidden={activeTab !== 'goals'}
+              aria-label="Цели"
+              className="absolute inset-0 overflow-y-auto overscroll-contain no-scrollbar pb-32"
+            >
+              <MemoizedGoalsScreen
+                goals={goals}
+                totalSaved={goalsTotalSaved}
+                totalTarget={goalsTotalTarget}
+                overallProgress={goalsOverallProgress}
+                activeCount={activeGoalsCount}
+                completedCount={completedGoalsCount}
+                canWrite={canWriteGoals}
+                onAddGoal={addGoal}
+                onUpdateGoal={updateGoal}
+                onDeleteGoal={deleteGoal}
+                onAddProgress={addGoalProgress}
+                onReduceProgress={reduceGoalProgress}
+              />
+            </section>
+          )}
+        </div>
+
+        <TabBar
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          onAddClick={openAddTransactionSheet}
+        />
+      </div>
+
+      {isSettingsOpen && (
         <SettingsScreen
-          onClose={() => setIsSettingsOpen(false)}
+          onClose={handleCloseSettings}
           userName={userName}
           initialBalance={mainAccountInitialBalance}
           monthlyBudget={monthlyBudget}
@@ -293,74 +421,6 @@ function App() {
           onDownloadRecovery={handleDownloadRecovery}
           storageWriteFailed={storageIssues.some((issue) => issue.kind === 'write-failed')}
         />
-      ) : (
-        <>
-          <div className="relative mx-auto min-h-screen max-w-md overflow-y-auto no-scrollbar pb-32">
-            {activeTab === 'stats' ? (
-              <StatisticsScreen
-                transactions={rubTransactions}
-                categories={categories}
-                otherCurrencyCodes={otherCurrencyCodes}
-                onSelectTransaction={handleSelectTransaction}
-              />
-            ) : activeTab === 'wallet' ? (
-              <WalletScreen
-                accounts={accounts}
-                transactions={transactions}
-                categories={categories}
-                onAddAccount={handleAddAccount}
-                onUpdateAccount={handleUpdateAccount}
-                onSetAccountArchived={setAccountArchived}
-                onRequestTransfer={() => setActiveSheet('transfer')}
-                onSelectTransaction={handleSelectTransaction}
-                canWriteAccounts={canWriteAccounts}
-                fallbackInitialBalance={mainAccountInitialBalance}
-              />
-            ) : activeTab === 'goals' ? (
-              <GoalsScreen
-                goals={goals}
-                totalSaved={goalsTotalSaved}
-                totalTarget={goalsTotalTarget}
-                overallProgress={goalsOverallProgress}
-                activeCount={activeGoalsCount}
-                completedCount={completedGoalsCount}
-                canWrite={canWriteGoals}
-                onAddGoal={addGoal}
-                onUpdateGoal={updateGoal}
-                onDeleteGoal={deleteGoal}
-                onAddProgress={addGoalProgress}
-                onReduceProgress={reduceGoalProgress}
-              />
-            ) : (
-              <HomeScreen
-                userName={userName}
-                monthLabel={monthLabel}
-                currentMonthKey={currentMonthKey}
-                monthlyExpenses={budget.monthlyExpenses}
-                monthlyBudget={monthlyBudget}
-                safeToSpend={budget.safeToSpend}
-                transactions={transactions}
-                accounts={accounts}
-                accountBalances={accountBalances}
-                activeCardKey={activeHomeCardKey}
-                canWriteAccounts={canWriteAccounts}
-                categories={categories}
-                onOpenSettings={() => setIsSettingsOpen(true)}
-                onSelectCard={setActiveHomeCardKey}
-                onOpenBalance={handleOpenBalanceAdjust}
-                onAddAccount={() => setActiveSheet('account-add')}
-                onOpenBudget={() => setActiveSheet('budget')}
-                onSelectTransaction={handleSelectTransaction}
-              />
-            )}
-          </div>
-
-          <TabBar
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            onAddClick={() => setActiveSheet('add')}
-          />
-        </>
       )}
 
       <AddTransactionSheet
@@ -377,7 +437,7 @@ function App() {
       <TransferSheet
         open={activeSheet === 'transfer'}
         accounts={accounts}
-        accountBalances={calculateAllAccountBalances(accounts, transactions)}
+        accountBalances={accountBalances}
         canWrite={canWriteAccounts && !hasUnreadableTransactions}
         onClose={closeSheet}
         onSave={handleSaveTransfer}

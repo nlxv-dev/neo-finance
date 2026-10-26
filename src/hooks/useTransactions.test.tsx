@@ -1,10 +1,17 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAIN_ACCOUNT_ID } from '@/data/accounts';
+import { MAIN_ACCOUNT_ID, createMainAccount, type Account } from '@/data/accounts';
 import type { CustomCategory } from '@/hooks/useCategories';
 import { useTransactions } from './useTransactions';
 
 const STORAGE_KEY = 'fintrack-transactions';
+
+const testAccounts: Account[] = [
+  createMainAccount(5_000),
+  { id: 'acc-cash', name: 'Наличные', type: 'cash', iconName: 'Coins', currency: 'RUB', initialBalance: 0, isArchived: false },
+  { id: 'acc-usd', name: 'USD', type: 'bank', iconName: 'Landmark', currency: 'USD', initialBalance: 0, isArchived: false },
+  { id: 'acc-archived', name: 'Архив', type: 'cash', iconName: 'Coins', currency: 'RUB', initialBalance: 0, isArchived: true },
+];
 const category: CustomCategory = {
   id: 'cat-food',
   name: 'Продукты',
@@ -49,7 +56,7 @@ describe('useTransactions account compatibility', () => {
     const { result } = renderHook(() => useTransactions([category]));
     expect(result.current.transactions[0].accountId).toBe('acc-cash');
 
-    act(() => result.current.updateTransaction(1, { amount: 300 }));
+    act(() => result.current.updateTransaction(1, { amount: 300 }, testAccounts));
 
     expect(result.current.transactions[0].accountId).toBe('acc-cash');
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '[]')[0].accountId).toBe('acc-cash');
@@ -58,18 +65,32 @@ describe('useTransactions account compatibility', () => {
   it('assigns new transactions to the main account unless an account is explicitly supplied', () => {
     const { result } = renderHook(() => useTransactions([category]));
 
-    act(() => result.current.addTransaction({ amount: 100, categoryId: category.id, isIncome: false }));
+    act(() => result.current.addTransaction({ amount: 100, categoryId: category.id, isIncome: false }, testAccounts));
 
     expect(result.current.transactions[0].accountId).toBe(MAIN_ACCOUNT_ID);
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '[]')[0].accountId).toBe(MAIN_ACCOUNT_ID);
   });
 
+  it('keeps two transactions created in the same batch and resolves same-millisecond ID collisions', () => {
+    const { result } = renderHook(() => useTransactions([category]));
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+    act(() => {
+      expect(result.current.addTransaction({ amount: 100, categoryId: category.id, isIncome: false }, testAccounts)).toBe(true);
+      expect(result.current.addTransaction({ amount: 200, categoryId: category.id, isIncome: false }, testAccounts)).toBe(true);
+    });
+    now.mockRestore();
+
+    expect(result.current.transactions).toHaveLength(2);
+    expect(new Set(result.current.transactions.map((transaction) => transaction.id)).size).toBe(2);
+    expect(result.current.transactions.map((transaction) => transaction.amount).sort((a, b) => a - b)).toEqual([100, 200]);
+  });
+
   it('supports explicitly reassigning a regular transaction to another account', () => {
     const { result } = renderHook(() => useTransactions([category]));
-    act(() => result.current.addTransaction({ amount: 100, categoryId: category.id, isIncome: false }));
+    act(() => result.current.addTransaction({ amount: 100, categoryId: category.id, isIncome: false }, testAccounts));
     const transactionId = result.current.transactions[0].id;
 
-    act(() => result.current.updateTransaction(transactionId, { accountId: 'acc-cash' }));
+    act(() => result.current.updateTransaction(transactionId, { accountId: 'acc-cash' }, testAccounts));
 
     expect(result.current.transactions[0].accountId).toBe('acc-cash');
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '[]')[0].accountId).toBe('acc-cash');
@@ -83,6 +104,22 @@ describe('useTransactions account compatibility', () => {
 
     expect(result.current.transactions[0].accountId).toBe(MAIN_ACCOUNT_ID);
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '[]')[0].accountId).toBe(MAIN_ACCOUNT_ID);
+  });
+
+  it('preserves the raw history when transaction IDs repeat or text exceeds storage limits', () => {
+    const duplicateRows = JSON.stringify([storedTransaction(), storedTransaction()]);
+    window.localStorage.setItem(STORAGE_KEY, duplicateRows);
+    const { result, unmount } = renderHook(() => useTransactions([category]));
+    expect(result.current.storageIssues.some((issue) => issue.kind === 'invalid-data')).toBe(true);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(duplicateRows);
+    unmount();
+
+    window.localStorage.clear();
+    const oversizedRow = JSON.stringify([storedTransaction({ category: 'x'.repeat(161) })]);
+    window.localStorage.setItem(STORAGE_KEY, oversizedRow);
+    const second = renderHook(() => useTransactions([category]));
+    expect(second.result.current.storageIssues.some((issue) => issue.kind === 'invalid-data')).toBe(true);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBe(oversizedRow);
   });
 
   it('does not overwrite malformed transaction account data', () => {
@@ -99,7 +136,7 @@ describe('useTransactions account compatibility', () => {
   it('adds transfers as one source/destination record and prevents generic editing from changing their meaning', () => {
     const { result } = renderHook(() => useTransactions([category]));
 
-    act(() => result.current.addTransfer({ amount: 400, fromAccountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-cash' }));
+    act(() => result.current.addTransfer({ amount: 400, fromAccountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-cash' }, testAccounts));
 
     const transfer = result.current.transactions[0];
     expect(transfer).toMatchObject({
@@ -115,7 +152,7 @@ describe('useTransactions account compatibility', () => {
       categoryId: category.id,
       isIncome: true,
       accountId: 'acc-cash',
-    }));
+    }, testAccounts));
 
     expect(result.current.transactions[0]).toEqual(transfer);
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '[]')[0].toAccountId).toBe('acc-cash');
@@ -127,8 +164,8 @@ describe('useTransactions account compatibility', () => {
 
     try {
       act(() => {
-        result.current.addTransaction({ amount: 100, categoryId: category.id, isIncome: false });
-        result.current.addTransfer({ amount: 50, fromAccountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-cash' });
+        result.current.addTransaction({ amount: 100, categoryId: category.id, isIncome: false }, testAccounts);
+        result.current.addTransfer({ amount: 50, fromAccountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-cash' }, testAccounts);
       });
 
       const ids = result.current.transactions.map((transaction) => transaction.id);
@@ -198,5 +235,32 @@ describe('useTransactions account compatibility', () => {
       isTransfer: true,
     });
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '[]')[0].toAccountId).toBe('acc-cash');
+  });
+
+  it('rejects invalid amounts, mismatched categories, archived targets and cross-currency account changes', () => {
+    const { result } = renderHook(() => useTransactions([category]));
+    act(() => {
+      expect(result.current.addTransaction({ amount: 0, categoryId: category.id, isIncome: false, accountId: MAIN_ACCOUNT_ID }, testAccounts)).toBe(false);
+      expect(result.current.addTransaction({ amount: 20.5, categoryId: category.id, isIncome: false, accountId: MAIN_ACCOUNT_ID }, testAccounts)).toBe(false);
+      expect(result.current.addTransaction({ amount: 100, categoryId: category.id, isIncome: true, accountId: MAIN_ACCOUNT_ID }, testAccounts)).toBe(false);
+    });
+    act(() => result.current.addTransaction({ amount: 100, categoryId: category.id, isIncome: false, accountId: MAIN_ACCOUNT_ID }, testAccounts));
+    const transactionId = result.current.transactions[0].id;
+    act(() => {
+      expect(result.current.updateTransaction(transactionId, { amount: -20 }, testAccounts)).toBe(false);
+      expect(result.current.updateTransaction(transactionId, { accountId: 'acc-archived' }, testAccounts)).toBe(false);
+      expect(result.current.updateTransaction(transactionId, { accountId: 'acc-usd' }, testAccounts)).toBe(false);
+    });
+    expect(result.current.transactions[0]).toMatchObject({ amount: 100, accountId: MAIN_ACCOUNT_ID });
+  });
+
+  it('rejects transfers to unavailable or cross-currency accounts and fractional amounts', () => {
+    const { result } = renderHook(() => useTransactions([category]));
+    act(() => {
+      expect(result.current.addTransfer({ amount: 10, fromAccountId: MAIN_ACCOUNT_ID, toAccountId: 'missing' }, testAccounts)).toBe(false);
+      expect(result.current.addTransfer({ amount: 10, fromAccountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-usd' }, testAccounts)).toBe(false);
+      expect(result.current.addTransfer({ amount: 10.5, fromAccountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-cash' }, testAccounts)).toBe(false);
+    });
+    expect(result.current.transactions).toHaveLength(0);
   });
 });

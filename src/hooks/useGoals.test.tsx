@@ -20,6 +20,19 @@ describe('useGoals', () => {
     expect(JSON.parse(window.localStorage.getItem(GOALS_STORAGE_KEY) || '[]')[0].currentAmount).toBe(0);
   });
 
+  it('does not overwrite a progress update when a goal is edited in the same React batch', () => {
+    const { result } = renderHook(() => useGoals());
+    act(() => {
+      result.current.addGoal({ name: 'Отпуск', targetAmount: 10_000, iconName: 'Plane', color: 'mint' });
+    });
+    const goalId = result.current.goals[0].id;
+    act(() => {
+      expect(result.current.addProgress(goalId, 1_500)).toBe(true);
+      expect(result.current.updateGoal(goalId, { name: 'Большой отпуск' })).toBe(true);
+    });
+    expect(result.current.goals[0]).toMatchObject({ name: 'Большой отпуск', currentAmount: 1_500 });
+  });
+
   it('tracks progress without creating or changing transaction or account storage', () => {
     window.localStorage.setItem('fintrack-accounts', JSON.stringify([{ id: 'acc-main' }]));
     window.localStorage.setItem('fintrack-transactions', JSON.stringify([{ id: 1, amount: 20 }]));

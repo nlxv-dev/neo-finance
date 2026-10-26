@@ -69,16 +69,17 @@ export function normalizeStoredGoals(value: unknown): Goal[] | null {
   for (const item of value) {
     if (!isRecord(item)) return null;
     if (
-      typeof item.id !== 'string' || !item.id.trim() || ids.has(item.id.trim()) ||
+      typeof item.id !== 'string' || !item.id.trim() || item.id.trim().length > 128 || ids.has(item.id.trim()) ||
       typeof item.name !== 'string' || !item.name.trim() || item.name.trim().length > 80 ||
       typeof item.targetAmount !== 'number' || !Number.isSafeInteger(item.targetAmount) || item.targetAmount <= 0 || item.targetAmount > 1_000_000_000_000 ||
       typeof item.currentAmount !== 'number' || !Number.isSafeInteger(item.currentAmount) || item.currentAmount < 0 || item.currentAmount > 1_000_000_000_000 ||
+      // Goal has no currency field by design; reject legacy/untyped foreign-currency goal records rather than interpreting them as RUB.
       (item.currency !== undefined && item.currency !== 'RUB') ||
       (item.iconName !== undefined && (typeof item.iconName !== 'string' || !KNOWN_ICONS.has(item.iconName))) ||
       (item.color !== undefined && (typeof item.color !== 'string' || !KNOWN_COLORS.has(item.color as GoalColor))) ||
       (item.deadline !== undefined && item.deadline !== '' && (typeof item.deadline !== 'string' || !isValidGoalDeadline(item.deadline))) ||
       (item.notes !== undefined && typeof item.notes !== 'string') ||
-      (item.createdAt !== undefined && typeof item.createdAt !== 'string')
+      (item.createdAt !== undefined && (typeof item.createdAt !== 'string' || item.createdAt.length > 100))
     ) return null;
 
     const id = item.id.trim();
@@ -126,9 +127,10 @@ export function getMonthlyRecommendation(
   return Math.ceil(remaining / months);
 }
 
+const goalDeadlineFormatter = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+
 export function formatGoalDeadline(deadline?: string): string | null {
   if (!deadline || !isValidGoalDeadline(deadline)) return null;
   const [year, month, day] = deadline.split('-').map(Number);
-  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })
-    .format(new Date(year, month - 1, day));
+  return goalDeadlineFormatter.format(new Date(year, month - 1, day));
 }

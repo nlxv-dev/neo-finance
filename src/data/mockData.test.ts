@@ -8,6 +8,9 @@ describe('getBudgetStatus', () => {
     [80, 100, 'warning'],
     [100, 100, 'warning'],
     [100.01, 100, 'overbudget'],
+    [0, 0, 'normal'],
+    [100, 0, 'normal'],
+    [100, -50, 'normal'],
   ] as const)('returns %s for %s spent of %s', (spent, budget, expected) => {
     expect(getBudgetStatus(spent, budget)).toBe(expected);
   });

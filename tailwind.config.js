@@ -15,10 +15,10 @@ export default {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       animation: {
-        'fade-in': 'fadeIn 0.6s ease-out forwards',
-        'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
-        'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        'ripple': 'ripple 0.6s ease-out forwards',
+        'fade-in': 'fadeIn 0.6s ease-out both',
+        'fade-in-up': 'fadeInUp 0.5s ease-out both',
+        'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both',
+        'ripple': 'ripple 0.6s ease-out both',
       },
       keyframes: {
         fadeIn: {

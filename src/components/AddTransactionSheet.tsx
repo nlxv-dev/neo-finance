@@ -45,7 +45,7 @@ interface AddTransactionSheetProps {
     categoryId: string;
     isIncome: boolean;
     accountId: string;
-  }) => void;
+  }) => boolean;
 }
 
 export function AddTransactionSheet({
@@ -74,6 +74,7 @@ export function AddTransactionSheet({
   const [activeIconGroup, setActiveIconGroup] = useState<string>(DEFAULT_ICON_GROUP);
   const [showIconSelector, setShowIconSelector] = useState(false); // Прогрессивное раскрытие сетки иконок
   const [categoryError, setCategoryError] = useState('');
+  const [saveError, setSaveError] = useState('');
   const [categoryToDeleteId, setCategoryToDeleteId] = useState<string | null>(null);
 
 
@@ -115,6 +116,7 @@ export function AddTransactionSheet({
 
   useEffect(() => {
     if (!open) return;
+    setSaveError('');
     setKeyboardOpen(false);
     setSelectedAccountId((current) => accounts.some((account) => account.id === current)
       ? current
@@ -128,12 +130,17 @@ export function AddTransactionSheet({
       (cat) => cat.id === selectedCategoryId
     );
     if (!currentCategory) return;
-    onSave({
+    const saved = onSave({
       amount: parsed,
       categoryId: currentCategory.id,
       isIncome: txType === 'income',
-      accountId: accounts.some((account) => account.id === selectedAccountId) ? selectedAccountId : MAIN_ACCOUNT_ID,
+      accountId: accounts.some((account) => account.id === selectedAccountId && !account.isArchived) ? selectedAccountId : MAIN_ACCOUNT_ID,
     });
+    if (!saved) {
+      setSaveError('Не удалось сохранить операцию. Проверьте счёт, категорию и состояние хранилища.');
+      return;
+    }
+    setSaveError('');
     setKeyboardOpen(false);
     onClose();
   };
@@ -280,7 +287,7 @@ export function AddTransactionSheet({
                   <button
                     key={t}
                     onClick={() => setTxType(t)}
-                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-medium transition-all duration-200 active:scale-95 gpu ${
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-medium transition-all duration-200 active:scale-95 ${
                       txType === t
                         ? t === 'income'
                           ? 'bg-mint/15 text-mint'
@@ -351,7 +358,7 @@ export function AddTransactionSheet({
                       <div key={cat.id} className="relative group">
                         <button
                           onClick={() => setSelectedCategoryId(cat.id)}
-                          className={`w-full flex flex-col items-center gap-1.5 rounded-2xl py-3 transition-all duration-200 active:scale-95 gpu ${
+                          className={`w-full flex flex-col items-center gap-1.5 rounded-2xl py-3 transition-all duration-200 active:scale-95 ${
                             active
                               ? 'neu-card-sm ring-1 ring-mint/40 dark:ring-mint/30'
                               : 'neu-inset'
@@ -390,7 +397,7 @@ export function AddTransactionSheet({
                   })}
                   <button
                     onClick={startCreatingCategory}
-                    className="flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 border border-dashed border-neutral-300 dark:border-neutral-700 bg-neutral-50/30 dark:bg-neutral-900/20 text-neutral-400 hover:text-mint transition-all duration-200 active:scale-95 gpu"
+                    className="flex flex-col items-center justify-center gap-1.5 rounded-2xl py-3 border border-dashed border-neutral-300 dark:border-neutral-700 bg-neutral-50/30 dark:bg-neutral-900/20 text-neutral-400 hover:text-mint transition-all duration-200 active:scale-95 "
                   >
                     <FolderPlus className="h-5 w-5" />
                     <span className="text-[11px] font-medium">
@@ -400,12 +407,14 @@ export function AddTransactionSheet({
                 </div>
               </div>}
 
+              {saveError && <p role="alert" className="mt-3 text-xs leading-relaxed text-red-500">{saveError}</p>}
+
               {keyboardOpen && (
                 <div className="mt-4 flex min-h-0 flex-col gap-2.5">
                   <button
                     onClick={handleSave}
                     disabled={!amount || parseInt(amount.replace(/\D/g, ''), 10) <= 0 || !filteredCategories.some((cat) => cat.id === selectedCategoryId)}
-                    className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40"
+                    className="flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] disabled:opacity-40"
                   >
                     <Check className="h-4 w-4" strokeWidth={2.5} />
                     Сохранить транзакцию
@@ -427,7 +436,7 @@ export function AddTransactionSheet({
                   parseInt(amount.replace(/\D/g, ''), 10) <= 0 ||
                   !filteredCategories.some((cat) => cat.id === selectedCategoryId)
                 }
-                className="mt-3 flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-95 gpu disabled:opacity-40"
+                className="mt-3 flex shrink-0 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-95 disabled:opacity-40"
               >
                 <Check className="h-4 w-4" strokeWidth={2.5} />
                 Сохранить транзакцию

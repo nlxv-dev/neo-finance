@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, Check } from 'lucide-react';
 import type { Account } from '@/data/accounts';
 import { AmountKeyboard, AmountTrigger } from '@/components/AmountKeyboard';
@@ -36,18 +36,31 @@ export function TransferSheet({
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [error, setError] = useState('');
 
+  const activeAccountsRef = useRef(activeAccounts);
+  const wasOpenRef = useRef(false);
+
   useEffect(() => {
-    if (!open) return;
-    const initialSource = activeAccounts.find((account) => account.id === 'acc-main') ?? activeAccounts[0];
+    activeAccountsRef.current = activeAccounts;
+  }, [activeAccounts]);
+
+  useEffect(() => {
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!justOpened) return;
+
+    // Reset the draft only at the start of a new session. Account list changes
+    // while the sheet is open must not erase an amount the user already entered.
+    const currentAccounts = activeAccountsRef.current;
+    const initialSource = currentAccounts.find((account) => account.id === 'acc-main') ?? currentAccounts[0];
     const initialDestination = initialSource
-      ? activeAccounts.find((account) => account.id !== initialSource.id && account.currency.toUpperCase() === initialSource.currency.toUpperCase())
+      ? currentAccounts.find((account) => account.id !== initialSource.id && account.currency.toUpperCase() === initialSource.currency.toUpperCase())
       : undefined;
     setFromAccountId(initialSource?.id ?? '');
     setToAccountId(initialDestination?.id ?? '');
     setAmountDigits('');
     setKeyboardOpen(false);
     setError('');
-  }, [open, activeAccounts]);
+  }, [open]);
 
   const sourceAccount = activeAccounts.find((account) => account.id === fromAccountId);
   const destinations = useMemo(
@@ -99,7 +112,6 @@ export function TransferSheet({
     onClose();
   };
 
-  if (!open) return null;
 
   return (
     <BottomSheet

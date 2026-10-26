@@ -108,6 +108,10 @@ export function AccountEditSheet({
     if (!canWrite) return;
 
     const unsignedBalance = Number.parseInt(balanceDigits || '0', 10) || 0;
+    if (!Number.isSafeInteger(unsignedBalance) || unsignedBalance > 1_000_000_000_000) {
+      setError('Сумма не должна превышать 1 000 000 000 000 ₽.');
+      return;
+    }
     onSave({
       name: trimmedName,
       type,
@@ -137,7 +141,6 @@ export function AccountEditSheet({
     onClose();
   };
 
-  if (!open) return null;
 
   return (
     <BottomSheet

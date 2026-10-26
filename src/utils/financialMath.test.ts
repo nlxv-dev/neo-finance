@@ -7,6 +7,7 @@ import {
   calculateBalancesByCurrency,
   calculateTotalBalance,
   calculateMainOpeningBalanceForTargetTotal,
+  sumAccountBalancesByCurrency,
   getPrimaryAccountId,
   migrateLegacyFinanceToAccounts,
   roundMoney,
@@ -30,6 +31,27 @@ describe('financialMath', () => {
     expect(roundMoney(-10.6)).toBe(-11);
     expect(roundMoney(Number.NaN)).toBe(0);
     expect(roundMoney(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+
+  it('aggregates every account in one pass and groups already-calculated balances by currency', () => {
+    const accounts = [
+      account({ initialBalance: 1_000 }),
+      account({ id: 'acc-cash', name: 'Наличные', initialBalance: 250 }),
+      account({ id: 'acc-usd', name: 'USD', currency: 'USD', initialBalance: 100 }),
+    ];
+    const transactions: AccountTransaction[] = [
+      { amount: 100, isIncome: false, accountId: MAIN_ACCOUNT_ID },
+      { amount: 20, isIncome: true, accountId: 'acc-cash' },
+      { amount: 50, isIncome: false, isTransfer: true, accountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-cash' },
+      { amount: 10, isIncome: true },
+      { amount: 5, isIncome: false, accountId: 'acc-missing' },
+      { amount: 7, isIncome: false, isTransfer: true, accountId: 'acc-missing', toAccountId: 'acc-usd' },
+      { amount: 3, isIncome: false, isTransfer: true, accountId: 'acc-usd', toAccountId: 'acc-missing' },
+    ];
+
+    const accountBalances = calculateAllAccountBalances(accounts, transactions);
+    expect(accountBalances).toEqual({ [MAIN_ACCOUNT_ID]: 851, 'acc-cash': 320, 'acc-usd': 104 });
+    expect(sumAccountBalancesByCurrency(accounts, accountBalances)).toEqual({ RUB: 1_171, USD: 104 });
   });
 
   it('preserves the legacy balance when old transactions have no accountId', () => {

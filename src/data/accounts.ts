@@ -65,13 +65,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const ACCOUNT_TYPES: readonly AccountType[] = ['card', 'cash', 'bank', 'savings', 'other'];
+const MAX_ACCOUNTS = 100;
+const MAX_ACCOUNT_ID_LENGTH = 128;
+const MAX_ACCOUNT_NAME_LENGTH = 80;
+const MAX_ACCOUNT_ICON_LENGTH = 100;
+const MAX_ACCOUNT_COLOR_LENGTH = 40;
+const MAX_ACCOUNT_BALANCE = 1_000_000_000_000;
 
 /**
  * Strict all-or-nothing normalization prevents partially dropping account data.
  * A malformed array returns null so safeLocalStorage can preserve the raw JSON.
  */
 export function normalizeStoredAccounts(value: unknown): Account[] | null {
-  if (!Array.isArray(value)) return null;
+  if (!Array.isArray(value) || value.length > MAX_ACCOUNTS) return null;
 
   const normalized: Account[] = [];
   const seenIds = new Set<string>();
@@ -84,12 +90,18 @@ export function normalizeStoredAccounts(value: unknown): Account[] | null {
       typeof candidate.name !== 'string' || !candidate.name.trim() ||
       typeof candidate.type !== 'string' ||
       typeof candidate.iconName !== 'string' ||
-      typeof candidate.initialBalance !== 'number' || !Number.isFinite(candidate.initialBalance)
+      typeof candidate.initialBalance !== 'number' || !Number.isSafeInteger(candidate.initialBalance)
     ) {
       return null;
     }
 
     const id = candidate.id.trim();
+    const name = candidate.name.trim();
+    const iconName = candidate.iconName.trim();
+    if (!id || id.length > MAX_ACCOUNT_ID_LENGTH || !name || name.length > MAX_ACCOUNT_NAME_LENGTH || iconName.length > MAX_ACCOUNT_ICON_LENGTH) return null;
+    if (candidate.initialBalance < -MAX_ACCOUNT_BALANCE || candidate.initialBalance > MAX_ACCOUNT_BALANCE) return null;
+    if (candidate.isArchived !== undefined && typeof candidate.isArchived !== 'boolean') return null;
+    if (candidate.color !== undefined && (typeof candidate.color !== 'string' || candidate.color.length > MAX_ACCOUNT_COLOR_LENGTH)) return null;
     if (seenIds.has(id)) return null;
     seenIds.add(id);
 
@@ -100,11 +112,11 @@ export function normalizeStoredAccounts(value: unknown): Account[] | null {
 
     normalized.push({
       id,
-      name: candidate.name.trim(),
+      name,
       type: ACCOUNT_TYPES.includes(candidate.type as AccountType)
         ? candidate.type as AccountType
         : 'card',
-      iconName: candidate.iconName.trim() || 'CreditCard',
+      iconName: iconName || 'CreditCard',
       currency,
       initialBalance: Math.round(candidate.initialBalance),
       isArchived: candidate.isArchived === true,

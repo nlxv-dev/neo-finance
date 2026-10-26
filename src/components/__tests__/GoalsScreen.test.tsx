@@ -29,10 +29,10 @@ describe('GoalsScreen', () => {
     expect(screen.queryByText('Подушка безопасности')).toBeNull();
   });
 
-  it('opens the create-goal sheet and explains that it does not reserve account funds', () => {
+  it('opens the create-goal sheet and explains that it does not reserve account funds', async () => {
     renderEmptyGoals();
     fireEvent.click(screen.getByRole('button', { name: 'Новая цель' }));
-    expect(screen.getByRole('dialog', { name: 'Новая цель' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Новая цель' })).toBeTruthy();
     expect(screen.getByText(/не резервирует деньги на счёте/i)).toBeTruthy();
   });
 });

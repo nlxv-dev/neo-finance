@@ -16,11 +16,9 @@ interface HomeScreenProps {
   transactions: Transaction[];
   accounts: Account[];
   accountBalances: Record<string, number>;
-  activeCardKey: string;
   canWriteAccounts: boolean;
   categories: CustomCategory[];
   onOpenSettings: () => void;
-  onSelectCard: (key: string) => void;
   onOpenBalance: (accountId: string) => void;
   onAddAccount: () => void;
   onOpenBudget: () => void;
@@ -37,11 +35,9 @@ export function HomeScreen({
   transactions,
   accounts,
   accountBalances,
-  activeCardKey,
   canWriteAccounts,
   categories,
   onOpenSettings,
-  onSelectCard,
   onOpenBalance,
   onAddAccount,
   onOpenBudget,
@@ -54,7 +50,7 @@ export function HomeScreen({
           <button
             type="button"
             onClick={onOpenSettings}
-            className="flex items-center gap-2 transition-transform active:scale-95 gpu"
+            className="flex items-center gap-2 transition-transform active:scale-95 "
             aria-label="Открыть настройки"
           >
             <div className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm">
@@ -81,9 +77,7 @@ export function HomeScreen({
             accountBalances={accountBalances}
             transactions={transactions}
             currentMonthKey={currentMonthKey}
-            activeCardKey={activeCardKey}
             canWriteAccounts={canWriteAccounts}
-            onSelectCard={onSelectCard}
             onEditBalance={onOpenBalance}
             onAddAccount={onAddAccount}
           />

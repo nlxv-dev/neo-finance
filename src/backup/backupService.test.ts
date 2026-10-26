@@ -5,6 +5,7 @@ import {
   BACKUP_SCHEMA_VERSION,
   createTransactionsCsv,
   importCsvTransactionsToStorage,
+  parseTransactionsCsv,
   restoreJsonBackupToStorage,
   STORAGE_KEYS,
   validateBackupFile,
@@ -118,6 +119,22 @@ describe('validateBackupFile', () => {
     expect(backup.data.profile.initialBalance).toBe(-10_000);
   });
 
+  it('rejects overlong transaction references and non-string ISO dates', () => {
+    const longReference = validBackup();
+    longReference.data.transactions = [{
+      id: 1, amount: 100, categoryId: 'c'.repeat(129), category: 'Еда',
+      categoryIconName: 'Utensils', date: '25 окт', isIncome: false,
+    }];
+    expect(() => validateBackupFile(longReference)).toThrow(/допустимую длину/);
+
+    const malformedDate = validBackup();
+    malformedDate.data.transactions = [{
+      id: 1, amount: 100, categoryId: null, category: 'Еда',
+      categoryIconName: 'Utensils', date: '25 окт', dateISO: 20261026, isIncome: false,
+    }];
+    expect(() => validateBackupFile(malformedDate)).toThrow(/ISO-дата/);
+  });
+
   it('rejects a non-positive monthly budget', () => {
     const input = validBackup();
     input.data.profile.monthlyBudget = 0;
@@ -210,6 +227,16 @@ describe('validateBackupFile', () => {
     }];
 
     expect(() => validateBackupFile(input)).toThrow(/Счёт транзакции/);
+  });
+
+  it('rejects a transaction whose linked category disagrees with its income/expense type', () => {
+    const input = validBackup();
+    input.data.categories = [{ id: 'salary', name: 'Зарплата', iconName: 'Banknote', isIncome: true, isArchived: false }];
+    input.data.transactions = [{
+      id: 8, amount: 1_000, categoryId: 'salary', category: 'Зарплата', categoryIconName: 'Banknote',
+      date: '26 окт', isIncome: false, accountId: MAIN_ACCOUNT_ID,
+    }];
+    expect(() => validateBackupFile(input)).toThrow(/тип.*категории/i);
   });
 
   it('restores accounts, goals, and transactions atomically from a current schema-4 backup', () => {
@@ -324,17 +351,52 @@ describe('validateBackupFile', () => {
       date: '25 окт', isIncome: false, isTransfer: true, accountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-usd',
     }];
 
-    expect(() => validateBackupFile(input)).toThrow(/неверный счёт или переводит между разными валютами/);
+    expect(() => validateBackupFile(input)).toThrow(/разн.*валют/);
   });
 
-  it('keeps the existing CSV columns but excludes transfers that CSV cannot represent', () => {
+  it('exports account references and internal transfers in the expanded CSV v2 schema', () => {
     const csv = createTransactionsCsv([
       { id: 1, title: 'Еда', categoryId: 'food', category: 'Еда', categoryIconName: 'Utensils', amount: 50, date: '25 окт', accountId: MAIN_ACCOUNT_ID, isIncome: false },
-      { id: 2, title: 'Перевод', categoryId: null, category: 'Перевод', categoryIconName: 'ArrowLeftRight', amount: 20, date: '25 окт', accountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-cash', isIncome: false, isTransfer: true },
+      { id: 2, title: 'Перевод между счетами', categoryId: null, category: 'Перевод', categoryIconName: 'ArrowLeftRight', amount: 20, date: '25 окт', accountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-cash', isIncome: false, isTransfer: true },
     ]);
-    expect(csv.split('\r\n')[0]).toBe('\uFEFF"id","amount","type","categoryId","category","categoryIconName","date","dateISO"');
+    expect(csv.split('\r\n')[0]).toBe('\uFEFF"id","amount","type","categoryId","category","categoryIconName","date","dateISO","accountId","toAccountId"');
     expect(csv).toContain('"Еда"');
-    expect(csv).not.toContain('"Перевод"');
+    expect(csv).toContain('"transfer"');
+    const parsed = parseTransactionsCsv(csv);
+    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.transactions[0].accountId).toBe(MAIN_ACCOUNT_ID);
+    expect(parsed.transactions[1]).toMatchObject({ isTransfer: true, accountId: MAIN_ACCOUNT_ID, toAccountId: 'acc-cash', isIncome: false });
+  });
+
+  it('round-trips formula-like user text safely in the expanded CSV format', () => {
+    const csv = createTransactionsCsv([{
+      id: 21,
+      title: '=SUM(1,1)',
+      categoryId: '=category-id',
+      category: '=SUM(1,1)',
+      categoryIconName: 'Utensils',
+      amount: 50,
+      date: '@imported date',
+      dateISO: '2026-10-25',
+      accountId: 'acc-main',
+      isIncome: false,
+    }]);
+    expect(csv).toContain("'=");
+    expect(csv).toContain("'@");
+    const parsed = parseTransactionsCsv(csv);
+    expect(parsed.transactions[0]).toMatchObject({
+      categoryId: '=category-id',
+      category: '=SUM(1,1)',
+      date: '@imported date',
+      accountId: 'acc-main',
+    });
+  });
+
+  it('imports legacy eight-column CSVs into the main account for backward compatibility', () => {
+    const legacyCsv = '\uFEFF"id","amount","type","categoryId","category","categoryIconName","date","dateISO"\r\n"7","50","expense","food","Еда","Utensils","25 окт","2026-10-25"\r\n';
+    const parsed = parseTransactionsCsv(legacyCsv);
+    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.transactions[0]).toMatchObject({ accountId: MAIN_ACCOUNT_ID, amount: 50, isIncome: false });
   });
 
   it('preserves internal transfers on CSV replace and resolves transaction ID collisions safely', () => {
@@ -366,7 +428,10 @@ describe('validateBackupFile', () => {
       isIncome: false,
     };
 
-    importCsvTransactionsToStorage([importedExpense], [existingTransfer], [], 'replace');
+    importCsvTransactionsToStorage([importedExpense], [existingTransfer], [], 'replace', [
+      ...createDefaultAccounts(0),
+      { id: 'acc-cash', name: 'Наличные', type: 'cash', iconName: 'Coins', currency: 'RUB', initialBalance: 0, isArchived: false },
+    ], 1);
 
     const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEYS.transactions) || '[]');
     expect(stored).toHaveLength(2);
@@ -379,6 +444,16 @@ describe('validateBackupFile', () => {
       toAccountId: 'acc-cash',
     });
     expect(new Set(stored.map((transaction: { id: number }) => transaction.id)).size).toBe(2);
+  });
+
+  it('rejects CSV v2 account references that do not exist rather than silently reassigning transactions', () => {
+    window.localStorage.clear();
+    const imported = [{
+      id: 15, title: 'Еда', categoryId: null, category: 'Еда', categoryIconName: 'Utensils',
+      amount: 50, date: '25 окт', accountId: 'acc-from-another-device', isIncome: false,
+    }];
+    expect(() => importCsvTransactionsToStorage(imported, [], [], 'append', createDefaultAccounts(0), 2)).toThrow(/счёт не существует/i);
+    expect(window.localStorage.getItem(STORAGE_KEYS.transactions)).toBeNull();
   });
 
 });

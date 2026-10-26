@@ -22,7 +22,7 @@ describe('account model and normalization', () => {
       type: 'cash',
       iconName: ' Coins ',
       currency: 'usd',
-      initialBalance: -10.4,
+      initialBalance: -10,
       isArchived: true,
       color: 'blue',
     }])).toEqual([{
@@ -35,6 +35,16 @@ describe('account model and normalization', () => {
       isArchived: true,
       color: 'blue',
     }]);
+  });
+
+  it('rejects account lists and fields that exceed safe storage limits', () => {
+    expect(normalizeStoredAccounts(Array.from({ length: 101 }, (_, index) => ({
+      id: `acc-${index}`, name: `Account ${index}`, type: 'cash', iconName: 'Coins', initialBalance: 0,
+    })))).toBeNull();
+    expect(normalizeStoredAccounts([{ id: 'a'.repeat(129), name: 'Cash', type: 'cash', iconName: 'Coins', initialBalance: 0 }])).toBeNull();
+    expect(normalizeStoredAccounts([{ id: 'acc-1', name: 'A'.repeat(81), type: 'cash', iconName: 'Coins', initialBalance: 0 }])).toBeNull();
+    expect(normalizeStoredAccounts([{ id: 'acc-1', name: 'Cash', type: 'cash', iconName: 'Coins', initialBalance: 1_000_000_000_001 }])).toBeNull();
+    expect(normalizeStoredAccounts([{ id: 'acc-1', name: 'Cash', type: 'cash', iconName: 'Coins', initialBalance: 10.5 }])).toBeNull();
   });
 
   it('uses safe defaults for an unknown account type but rejects malformed rows', () => {

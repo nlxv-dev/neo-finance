@@ -27,7 +27,7 @@ interface TransactionDetailSheetProps {
   accounts: Account[];
   onClose: () => void;
   onExited?: () => void;
-  onUpdate: (id: number, updates: TransactionUpdates) => void;
+  onUpdate: (id: number, updates: TransactionUpdates) => boolean;
   onDelete: (id: number) => void;
 }
 
@@ -48,6 +48,7 @@ export function TransactionDetailSheet({
   const [editType, setEditType] = useState<TxType>('expense');
   const [editAccountId, setEditAccountId] = useState<string>(MAIN_ACCOUNT_ID);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (!transaction) return;
@@ -58,6 +59,7 @@ export function TransactionDetailSheet({
     setEditType(transaction.isIncome ? 'income' : 'expense');
     setEditAccountId(transaction.accountId || MAIN_ACCOUNT_ID);
     setKeyboardOpen(false);
+    setSaveError('');
   }, [transaction]);
 
   const activeTransaction = transaction ?? snapshot;
@@ -92,6 +94,7 @@ export function TransactionDetailSheet({
       ? current.id
       : fallback?.id ?? '');
     setKeyboardOpen(false);
+    setSaveError('');
     setMode('edit');
   };
 
@@ -112,20 +115,37 @@ export function TransactionDetailSheet({
 
   const handleSaveEdit = () => {
     const parsed = parseInt(editAmount.replace(/\D/g, ''), 10);
-    if (!parsed || parsed <= 0) return;
+    if (!parsed || parsed <= 0 || !Number.isSafeInteger(parsed)) {
+      setSaveError('Введите положительную сумму в целых рублях.');
+      return;
+    }
 
     const selectedCategory = categories.find((category) => category.id === editCategoryId);
-    if (!selectedCategory || selectedCategory.isIncome !== (editType === 'income')) return;
-    if (selectedCategory.isArchived && selectedCategory.id !== activeTransaction.categoryId) return;
+    if (!selectedCategory || selectedCategory.isIncome !== (editType === 'income')) {
+      setSaveError('Выберите категорию, соответствующую типу операции.');
+      return;
+    }
+    if (selectedCategory.isArchived && selectedCategory.id !== activeTransaction.categoryId) {
+      setSaveError('Архивная категория недоступна для новых операций.');
+      return;
+    }
     const nextAccount = editableAccounts.find((account) => account.id === editAccountId);
-    if (!nextAccount) return;
+    if (!nextAccount) {
+      setSaveError('Выберите доступный счёт.');
+      return;
+    }
 
-    onUpdate(activeTransaction.id, {
+    const saved = onUpdate(activeTransaction.id, {
       amount: parsed,
       categoryId: selectedCategory.id,
       isIncome: editType === 'income',
       accountId: nextAccount.id,
     });
+    if (!saved) {
+      setSaveError('Операция не сохранена. Проверьте счёт, категорию и состояние хранилища.');
+      return;
+    }
+    setSaveError('');
     setKeyboardOpen(false);
     setMode('view');
   };
@@ -202,6 +222,7 @@ export function TransactionDetailSheet({
             editAccountId={editAccountId}
             setEditAccountId={setEditAccountId}
             currencySymbol={transactionCurrencySymbol}
+            saveError={saveError}
             onTypeChange={handleEditTypeChange}
             onSave={handleSaveEdit}
             onCancel={() => { setKeyboardOpen(false); setMode('view'); }}
@@ -312,14 +333,14 @@ function ViewMode({
       <div className="flex gap-2.5">
         {!transaction.isTransfer && <button
           onClick={onEdit}
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium text-neutral-700 dark:text-white neu-card-sm transition-all duration-200 active:scale-[0.98] gpu"
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-medium text-neutral-700 dark:text-white neu-card-sm transition-all duration-200 active:scale-[0.98] "
         >
           <Pencil className="h-4 w-4" />
           Изменить
         </button>}
         <button
           onClick={onDelete}
-          className="flex items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-medium text-red-500 dark:text-red-400 transition-all duration-200 active:scale-[0.98] gpu"
+          className="flex items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-medium text-red-500 dark:text-red-400 transition-all duration-200 active:scale-[0.98] "
           style={{ background: 'rgba(239, 68, 68, 0.08)' }}
           aria-label="Удалить"
         >
@@ -352,6 +373,7 @@ function EditMode({
   editAccountId,
   setEditAccountId,
   currencySymbol,
+  saveError,
   onTypeChange,
   onSave,
   onCancel,
@@ -368,6 +390,7 @@ function EditMode({
   editAccountId: string;
   setEditAccountId: (id: string) => void;
   currencySymbol: string;
+  saveError: string;
   onTypeChange: (type: TxType) => void;
   onSave: () => void;
   onCancel: () => void;
@@ -387,13 +410,14 @@ function EditMode({
           Измените тип, сумму и категорию
         </p>
       )}
+      {saveError && <p role="alert" className="mt-2 text-xs leading-relaxed text-red-500">{saveError}</p>}
 
       <div className={`${keyboardOpen ? 'mt-3' : 'mt-4'} flex shrink-0 gap-2`}>
         {(['expense', 'income'] as const).map((type) => (
           <button
             key={type}
             onClick={() => onTypeChange(type)}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-medium transition-all duration-200 active:scale-95 gpu ${
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-medium transition-all duration-200 active:scale-95 ${
               editType === type
                 ? type === 'income'
                   ? 'bg-mint/15 text-mint dark:bg-mint/15 dark:text-mint'
@@ -462,7 +486,7 @@ function EditMode({
                 <button
                   key={category.id}
                   onClick={() => setEditCategoryId(category.id)}
-                  className={`flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-1 py-3 transition-all duration-200 active:scale-95 gpu ${
+                  className={`flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-1 py-3 transition-all duration-200 active:scale-95 ${
                     active ? 'neu-card-sm ring-1 ring-mint/40 dark:ring-mint/30' : 'neu-inset'
                   }`}
                 >
@@ -489,14 +513,14 @@ function EditMode({
           <div className="flex shrink-0 gap-2.5">
             <button
               onClick={onCancel}
-              className="flex-1 rounded-2xl py-3 text-sm font-medium text-neutral-500 neu-card-sm transition-all duration-200 active:scale-[0.98] gpu dark:text-neutral-400"
+              className="flex-1 rounded-2xl py-3 text-sm font-medium text-neutral-500 neu-card-sm transition-all duration-200 active:scale-[0.98]  dark:text-neutral-400"
             >
               Отмена
             </button>
             <button
               onClick={onSave}
               disabled={!parsedAmount || parsedAmount <= 0 || !hasSelection}
-              className="flex flex-[2] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40 disabled:active:scale-100"
+              className="flex flex-[2] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
             >
               <Check className="h-4 w-4" strokeWidth={2.5} />
               Сохранить
@@ -518,14 +542,14 @@ function EditMode({
       {!keyboardOpen && <div className="flex gap-2.5 pt-3">
         <button
           onClick={onCancel}
-          className="flex-1 rounded-2xl py-3.5 text-sm font-medium text-neutral-500 dark:text-neutral-400 neu-card-sm transition-all duration-200 active:scale-[0.98] gpu"
+          className="flex-1 rounded-2xl py-3.5 text-sm font-medium text-neutral-500 dark:text-neutral-400 neu-card-sm transition-all duration-200 active:scale-[0.98] "
         >
           Отмена
         </button>
         <button
           onClick={onSave}
           disabled={!parsedAmount || parsedAmount <= 0 || !hasSelection}
-          className="flex flex-[2] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] gpu disabled:opacity-40 disabled:active:scale-100"
+          className="flex flex-[2] items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-mint to-indigoblue py-3.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:active:scale-100"
         >
           <Check className="h-4 w-4" strokeWidth={2.5} />
           Сохранить
