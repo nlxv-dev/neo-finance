@@ -55,7 +55,7 @@ export function HomeScreen({
           >
             <div className="h-9 w-9 overflow-hidden rounded-xl neu-card-sm">
               <img
-                src={`${import.meta.env.BASE_URL}pwa-192x192.png`}
+                src={`${import.meta.env.BASE_URL}pwa-icon-v2-192.png`}
                 alt=""
                 className="h-full w-full object-cover"
               />

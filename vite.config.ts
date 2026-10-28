@@ -17,7 +17,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['favicon.svg', 'favicon-32x32.png', 'apple-touch-icon.png', 'pwa-512x512-maskable.png'],
+      includeAssets: [
+        'favicon-v2-16x16.png',
+        'favicon-v2-32x32.png',
+        'apple-touch-icon-v2.png',
+        'pwa-icon-v2-maskable-512.png',
+      ],
       manifest: {
         name: 'Neo Finance',
         short_name: 'NeoFinance',
@@ -30,19 +35,19 @@ export default defineConfig({
         scope: '/neo-finance/',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: 'pwa-icon-v2-192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: 'pwa-512x512.png',
+            src: 'pwa-icon-v2-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any',
           },
           {
-            src: 'pwa-512x512-maskable.png',
+            src: 'pwa-icon-v2-maskable-512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
