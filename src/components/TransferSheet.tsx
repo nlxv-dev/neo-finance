@@ -117,7 +117,6 @@ export function TransferSheet({
     <BottomSheet
       open={open}
       onClose={onClose}
-      onEscape={closeOrHideKeyboard}
       onBackdropClick={closeOrHideKeyboard}
       onPanelClick={(event) => {
         if (!keyboardOpen) return;
@@ -155,11 +154,8 @@ export function TransferSheet({
               <div className="flex items-baseline justify-center">
                 <AmountTrigger
                   value={amountDigits}
-                  onChange={(value) => setAmountDigits(value.replace(/\D/g, '').slice(0, 12))}
                   keyboardOpen={keyboardOpen}
                   onToggleKeyboard={() => setKeyboardOpen((value) => !value)}
-                  onOpenKeyboard={() => setKeyboardOpen(true)}
-                  onCloseKeyboard={() => setKeyboardOpen(false)}
                   label={`Сумма перевода в ${currency}`}
                   keyboardId="transfer-amount-keyboard"
                   showCurrency={false}
@@ -293,7 +289,7 @@ function AccountSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-12 w-full rounded-xl neu-inset px-3 text-sm text-neutral-900 outline-none focus-visible:ring-2 focus-visible:ring-mint/50 dark:text-white"
+        className="min-h-12 w-full rounded-xl neu-inset px-3 text-sm text-neutral-900 outline-none dark:text-white"
       >
         {accounts.map((account) => (
           <option key={account.id} value={account.id}>

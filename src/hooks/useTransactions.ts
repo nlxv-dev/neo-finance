@@ -1,9 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { areRecordArraysEqual } from '@/storage/recordEquality';
 import { type Transaction, initialTransactions } from '@/data/mockData';
 import { MAIN_ACCOUNT_ID, type Account } from '@/data/accounts';
-import type { CustomCategory } from '@/hooks/useCategories';
-import { resolveTransactionDateISO, toLocalISODate } from '@/data/transactionDates';
-import { getTransactionRuleError, MAX_TRANSACTION_AMOUNT } from '@/data/transactionRules';
+import type { CustomCategory } from '@/data/categories';
+import { normalizeStoredTransactions, reconcileTransactionAccountReferences } from '@/data/transactions';
+import { STORAGE_KEYS } from '@/storage/storageKeys';
+import { getDatabaseBootstrapSnapshot, hasDatabaseBootstrap, persistTransactions, queryDatabaseTransactions } from '@/storage/databaseStorage';
+import { toLocalISODate } from '@/data/transactionDates';
+import { getTransactionRuleError } from '@/data/transactionRules';
 import {
   canPersistReadStatus,
   readStoredJson,
@@ -12,25 +17,7 @@ import {
   type StorageReadResult,
 } from '@/storage/safeLocalStorage';
 
-const STORAGE_KEY = 'fintrack-transactions';
-
-type StoredTransaction = Partial<Transaction> & {
-  category?: unknown;
-  title?: unknown;
-  categoryId?: unknown;
-  categoryIconName?: unknown;
-  amount?: unknown;
-  date?: unknown;
-  isIncome?: unknown;
-  id?: unknown;
-  accountId?: unknown;
-  isTransfer?: unknown;
-  toAccountId?: unknown;
-};
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
+const STORAGE_KEY = STORAGE_KEYS.transactions;
 
 /** IDs share one namespace across regular transactions and internal transfers. */
 function getAvailableTransactionId(preferredId: number, transactions: readonly Transaction[]): number {
@@ -40,124 +27,9 @@ function getAvailableTransactionId(preferredId: number, transactions: readonly T
   return id;
 }
 
-/**
- * Normalizes the known legacy transaction shapes. If any row is structurally invalid,
- * return null for the whole dataset so the caller can preserve the original JSON instead
- * of silently dropping that row and saving a truncated transaction list.
- */
-function normalizeStoredTransactions(value: unknown, categories: CustomCategory[]): Transaction[] | null {
-  if (!Array.isArray(value) || value.length > 50_000) return null;
-
-  const normalized: Transaction[] = [];
-  const seenIds = new Set<number>();
-
-  for (const candidate of value) {
-    if (!isRecord(candidate)) return null;
-    const item = candidate as StoredTransaction;
-
-    if (
-      typeof item.id !== 'number' ||
-      !Number.isSafeInteger(item.id) || item.id < 0 ||
-      typeof item.amount !== 'number' ||
-      !Number.isSafeInteger(item.amount) || item.amount <= 0 || item.amount > MAX_TRANSACTION_AMOUNT ||
-      typeof item.date !== 'string' ||
-      typeof item.isIncome !== 'boolean'
-    ) {
-      return null;
-    }
-    if (seenIds.has(item.id)) return null;
-    seenIds.add(item.id);
-
-    if (
-      Object.prototype.hasOwnProperty.call(item, 'categoryId') &&
-      item.categoryId !== null &&
-      (typeof item.categoryId !== 'string' || item.categoryId.length > 128)
-    ) {
-      return null;
-    }
-
-    if (
-      Object.prototype.hasOwnProperty.call(item, 'accountId') &&
-      item.accountId !== null &&
-      typeof item.accountId !== 'string'
-    ) {
-      return null;
-    }
-    if (Object.prototype.hasOwnProperty.call(item, 'isTransfer') && typeof item.isTransfer !== 'boolean') {
-      return null;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(item, 'toAccountId') &&
-      item.toAccountId !== null &&
-      typeof item.toAccountId !== 'string'
-    ) {
-      return null;
-    }
-
-    const categoryName =
-      typeof item.category === 'string'
-        ? item.category
-        : typeof item.title === 'string'
-          ? item.title
-          : 'Без категории';
-    if (categoryName.length > 160 || (typeof item.title === 'string' && item.title.length > 160) ||
-      (typeof item.dateISO === 'string' && item.dateISO.length > 10) || item.date.length > 80 ||
-      (typeof item.categoryIconName === 'string' && item.categoryIconName.length > 100)) return null;
-
-    const hasCategoryIdField = Object.prototype.hasOwnProperty.call(item, 'categoryId');
-    const existingId = typeof item.categoryId === 'string' ? item.categoryId : null;
-    let linkedCategory: CustomCategory | undefined;
-
-    if (existingId) {
-      linkedCategory = categories.find((category) => category.id === existingId);
-    } else if (!hasCategoryIdField) {
-      // Legacy entries stored only a name. Migrate only if the match is unambiguous.
-      const matches = categories.filter(
-        (category) =>
-          !category.isArchived &&
-          category.name.trim().toLocaleLowerCase('ru-RU') === categoryName.trim().toLocaleLowerCase('ru-RU') &&
-          category.isIncome === item.isIncome
-      );
-      if (matches.length === 1) linkedCategory = matches[0];
-    }
-
-    const legacyIcon = typeof item.categoryIconName === 'string' ? item.categoryIconName : 'HelpCircle';
-    const safeId = linkedCategory?.id ?? (hasCategoryIdField ? existingId : null);
-    const displayName = linkedCategory?.name ?? categoryName;
-    const iconName = linkedCategory?.iconName ?? legacyIcon;
-    const accountId = typeof item.accountId === 'string' && item.accountId.trim()
-      ? item.accountId.trim()
-      : MAIN_ACCOUNT_ID;
-    const isTransfer = item.isTransfer === true;
-    const toAccountId = typeof item.toAccountId === 'string' ? item.toAccountId.trim() : '';
-    if (accountId.length > 128 || toAccountId.length > 128) return null;
-    if (isTransfer && (!toAccountId || toAccountId === accountId || item.amount <= 0 || item.isIncome)) return null;
-    if (!isTransfer && toAccountId) return null;
-
-    normalized.push({
-      id: item.id,
-      title: isTransfer ? 'Перевод между счетами' : (typeof item.title === 'string' ? (linkedCategory?.name ?? item.title) : displayName),
-      categoryId: isTransfer ? null : safeId,
-      category: isTransfer ? 'Перевод' : displayName,
-      categoryIconName: isTransfer ? 'ArrowLeftRight' : iconName,
-      amount: item.amount,
-      date: item.date,
-      dateISO: resolveTransactionDateISO({
-        id: item.id,
-        date: item.date,
-        dateISO: typeof item.dateISO === 'string' ? item.dateISO : undefined,
-      }),
-      // One-time, backward-compatible row migration: historic entries belong to the main account.
-      accountId,
-      isIncome: isTransfer ? false : item.isIncome,
-      ...(isTransfer ? { isTransfer: true, toAccountId } : {}),
-    });
-  }
-
-  return normalized;
-}
-
 function loadTransactions(categories: CustomCategory[]): StorageReadResult<Transaction[]> {
+  const snapshot = getDatabaseBootstrapSnapshot();
+  if (snapshot) return { value: snapshot.transactions, status: 'valid' };
   return readStoredJson(STORAGE_KEY, initialTransactions, (value) => normalizeStoredTransactions(value, categories));
 }
 
@@ -233,19 +105,62 @@ export function useTransactions(
 ) {
   const [record, setRecord] = useState(() => loadTransactions(categories));
   const recordRef = useRef(record);
+  const pendingLocalWrites = useRef(0);
   const [writeIssue, setWriteIssue] = useState<StorageIssue | null>(null);
+  const liveTransactions = useLiveQuery(
+    () => hasDatabaseBootstrap() ? queryDatabaseTransactions() : null,
+    [],
+    null,
+  );
   const transactions = record.value;
+
+  const applyLiveTransactions = useCallback((rows: Transaction[]) => {
+    if (pendingLocalWrites.current > 0) return;
+    const current = recordRef.current;
+    if (areRecordArraysEqual(current.value, rows) && current.status === 'valid' && !current.issue) return;
+    const next: StorageReadResult<Transaction[]> = { value: rows, status: 'valid' };
+    recordRef.current = next;
+    setRecord(next);
+  }, []);
+
+  const refreshLatestTransactions = useCallback(async () => {
+    try {
+      applyLiveTransactions(await queryDatabaseTransactions());
+    } catch {
+      setWriteIssue({ key: STORAGE_KEY, kind: 'write-failed' });
+    }
+  }, [applyLiveTransactions]);
+
+  const persistLocalTransactions = useCallback((previousRows: Transaction[], rows: Transaction[]) => {
+    if (!hasDatabaseBootstrap()) return;
+    pendingLocalWrites.current += 1;
+    void persistTransactions(rows, previousRows).then(() => setWriteIssue(null)).catch(() => {
+      setWriteIssue({ key: STORAGE_KEY, kind: 'write-failed' });
+    }).finally(() => {
+      pendingLocalWrites.current = Math.max(0, pendingLocalWrites.current - 1);
+      if (pendingLocalWrites.current === 0) void refreshLatestTransactions();
+    });
+  }, [refreshLatestTransactions]);
+
+  // useLiveQuery makes external Dexie changes visible, but an event from a
+  // previous local write must not roll back a newer optimistic action.
+  useEffect(() => {
+    if (!hasDatabaseBootstrap() || !liveTransactions) return;
+    applyLiveTransactions(liveTransactions);
+  }, [liveTransactions, applyLiveTransactions]);
 
   const commitRecord = useCallback((next: StorageReadResult<Transaction[]>): boolean => {
     const current = recordRef.current;
     if (!dependenciesHealthy || !canPersistReadStatus(current.status)) return false;
     recordRef.current = next;
     setRecord(next);
+    persistLocalTransactions(current.value, next.value);
     return true;
-  }, [dependenciesHealthy]);
+  }, [dependenciesHealthy, persistLocalTransactions]);
 
   useEffect(() => {
     recordRef.current = record;
+    if (hasDatabaseBootstrap()) return;
     if (!dependenciesHealthy || !canPersistReadStatus(record.status)) return;
     const issue = writeStoredJson(STORAGE_KEY, record.value);
     setWriteIssue((previous) => {
@@ -342,31 +257,10 @@ export function useTransactions(
    * has been validated, and corrupt transaction storage remains read-only.
    */
   const reconcileAccountReferences = useCallback((validAccountIds: readonly string[]) => {
-    const knownIds = new Set(validAccountIds);
-    if (!knownIds.has(MAIN_ACCOUNT_ID)) return;
-
     const previous = recordRef.current;
     if (!dependenciesHealthy || !canPersistReadStatus(previous.status)) return;
-    let changed = false;
-    const nextTransactions = previous.value.map((transaction) => {
-        const accountId = transaction.accountId?.trim();
-        const resolvedAccountId = accountId && knownIds.has(accountId) ? accountId : MAIN_ACCOUNT_ID;
-        if (transaction.isTransfer) {
-          const toAccountId = transaction.toAccountId?.trim();
-          const resolvedToAccountId = toAccountId && knownIds.has(toAccountId) ? toAccountId : MAIN_ACCOUNT_ID;
-          // If both unknown endpoints collapse to the same fallback account, keep
-          // the original record unchanged rather than persisting an invalid
-          // self-transfer. Balance math treats that unresolved movement as net zero.
-          if (resolvedAccountId === resolvedToAccountId && accountId !== toAccountId) return transaction;
-          if (resolvedAccountId === accountId && resolvedToAccountId === toAccountId) return transaction;
-          changed = true;
-          return { ...transaction, accountId: resolvedAccountId, toAccountId: resolvedToAccountId };
-        }
-        if (resolvedAccountId === accountId) return transaction;
-        changed = true;
-        return { ...transaction, accountId: resolvedAccountId };
-    });
-    if (changed) commitRecord({ ...previous, value: nextTransactions });
+    const reconciled = reconcileTransactionAccountReferences(previous.value, validAccountIds);
+    if (reconciled.changed) commitRecord({ ...previous, value: reconciled.transactions });
   }, [commitRecord, dependenciesHealthy]);
 
   const storageIssues = [record.issue, writeIssue].filter((issue): issue is StorageIssue => Boolean(issue));

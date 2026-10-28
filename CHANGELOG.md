@@ -1,3 +1,56 @@
+# Neo Finance v7.5.0 — Data Foundation, Analytics & Experience Update
+
+**Дата релиза:** 28 октября 2026 г.
+
+Neo Finance получает более надёжную основу хранения данных, расширенную аналитику и отполированный пользовательский опыт.
+
+## Что нового
+
+- **Dexie и IndexedDB:** финансовые данные используют IndexedDB как основное хранилище; миграция старых данных LocalStorage защищена проверками совместимости и восстановления. Добавлены проверки целостности записей и согласованные операции чтения/экспорта.
+- **Аналитика периодов:** сравнение выбранного периода с предыдущим, включая изменения по категориям. Улучшена обработка границ календарных периодов, нулевой базы сравнения и переводов между счетами.
+- **Более быстрый запуск:** экраны подготавливаются параллельно с инициализацией базы; текстовый экран ожидания заменён визуальным skeleton. Экран восстановления остаётся доступен при реальных ошибках запуска.
+- **Управляемые обновления PWA:** приложение предлагает применить найденное обновление, не перезагружая страницу без выбора пользователя; добавлены уведомление о готовности к офлайн-работе и восстановление после устаревших чанков.
+- **Обновлённый визуальный стиль:** возвращён яркий mint-акцент, упрощены touch-first взаимодействия и обновлена светлая иконка приложения для PWA, вкладки браузера, iOS и встроенного логотипа.
+
+## Технические примечания
+
+- Схема базы Dexie и версия продукта — разные вещи; номер релиза сам по себе не сбрасывает и не мигрирует пользовательские данные.
+- LocalStorage остаётся для раннего применения отдельных настроек интерфейса и совместимости/восстановления старых данных. После инициализации финансовые операции выполняются через основное хранилище Dexie.
+- JSON-бэкап остаётся рекомендуемым способом переноса данных между браузерной PWA и отдельной Android-оболочкой.
+
+---
+
+# Neo Finance v7.5.0 — Data Foundation, Analytics & Experience Update
+
+**Release date:** October 28, 2026
+
+Neo Finance receives a more reliable storage foundation, richer analytics, and a refined user experience.
+
+## What's new
+
+- **Dexie and IndexedDB:** financial records use IndexedDB as the primary store. Legacy LocalStorage migration is guarded by compatibility and recovery checks, with stronger record-integrity validation and consistent reads/exports.
+- **Period analytics:** compare the selected period with the previous one, including category-level changes. Calendar boundaries, zero comparison baselines, and account transfers are handled more carefully.
+- **Faster startup:** screens are prepared in parallel with database initialization; the text-based loading screen is replaced by a visual skeleton. The recovery screen remains available for genuine startup failures.
+- **Controlled PWA updates:** the app prompts before applying an available update rather than reloading without user choice. Offline-ready messaging and recovery from stale chunks are included.
+- **Refined visual experience:** vivid mint accents are restored, touch-first interactions are streamlined, and the light app icon is updated across PWA, browser favicon, iOS, and in-app branding.
+
+## Technical notes
+
+- The Dexie database schema version is separate from the product release version; changing the release number does not itself reset or migrate user data.
+- LocalStorage remains in use for early application of selected UI preferences and for legacy compatibility/recovery. After initialization, live financial operations use Dexie as the primary store.
+- JSON backup remains the recommended way to move data between the browser PWA and the separate Android wrapper.
+
+---
+
+*Neo Finance — NLXV Independent Digital Laboratory*
+
+
+## Analytics Stage 14 — category change analysis
+
+- Added a compact monthly comparison that identifies the expense or income categories with the largest absolute changes versus the comparable previous period.
+- Added pure calculations and tests for stable category IDs, normalized legacy names, transfer exclusion, income/expense separation, and unchanged categories.
+- No storage schema, dependencies, currency conversion, or core transaction behavior changed.
+
 # Neo Finance v6.5.0 — Accounts, Transfers & Goals Update 💳
 
 **Обновление Neo Finance:** приложение получает полноценную работу с несколькими счетами, переводы между ними, персональные карточки баланса на главном экране и отдельный раздел **«Цели»**. Балансы, история операций и месячная динамика теперь учитываются с привязкой к конкретному счёту.

@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent, type TouchEvent } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
 import { ArrowDownRight, ArrowUpRight, Minus, Plus } from 'lucide-react';
 import { AnimatedCounter } from '@/components/AnimatedCounter';
 import type { Account } from '@/data/accounts';
@@ -137,15 +137,6 @@ export const BalanceCardCarousel = memo(function BalanceCardCarousel({
     move(deltaX < 0 ? 1 : -1);
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      move(1);
-    } else if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      move(-1);
-    }
-  };
 
   const handleActiveCardClick = (slide: CardSlide) => {
     if (suppressClick.current) {
@@ -177,8 +168,6 @@ export const BalanceCardCarousel = memo(function BalanceCardCarousel({
       role="group"
       aria-roledescription="карусель счетов"
       aria-label="Карусель счетов"
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >

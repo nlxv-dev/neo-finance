@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAIN_ACCOUNT_ID, createMainAccount, type Account } from '@/data/accounts';
-import type { CustomCategory } from '@/hooks/useCategories';
+import type { CustomCategory } from '@/data/categories';
 import { useTransactions } from './useTransactions';
 
 const STORAGE_KEY = 'fintrack-transactions';

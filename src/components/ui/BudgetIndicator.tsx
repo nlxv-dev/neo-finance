@@ -58,7 +58,7 @@ export function BudgetIndicator({ spent, budget, safeToSpend, onEditBudget }: Bu
           type="button"
           onClick={onEditBudget}
           aria-label={`Изменить месячный бюджет: ${formatCurrency(budget)} рублей`}
-          className="mt-1 inline-flex max-w-full items-baseline justify-center rounded-lg px-2 py-1 text-neutral-900 transition-opacity hover:opacity-80 active:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/60 focus-visible:ring-offset-2 dark:text-white dark:focus-visible:ring-offset-neutral-900"
+          className="mt-1 inline-flex max-w-full items-baseline justify-center rounded-lg px-2 py-1 text-neutral-900 transition-opacity hover:opacity-80 active:opacity-60 dark:text-white "
         >
           <span
             className={`max-w-full whitespace-nowrap text-4xl font-light leading-none tracking-tight tabular-nums sm:text-[2.65rem] ${
@@ -121,7 +121,7 @@ export function BudgetIndicator({ spent, budget, safeToSpend, onEditBudget }: Bu
           type="button"
           onClick={onEditBudget}
           aria-label={`Изменить месячный бюджет: ${formatCurrency(budget)} рублей`}
-          className="min-h-11 shrink-0 rounded-md text-[11px] text-neutral-500 transition-opacity hover:opacity-75 active:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/60 dark:text-neutral-400"
+          className="min-h-11 shrink-0 rounded-md text-[11px] text-neutral-500 transition-opacity hover:opacity-75 active:opacity-60 dark:text-neutral-400"
         >
           Бюджет {formatCurrency(budget)} ₽
         </button>

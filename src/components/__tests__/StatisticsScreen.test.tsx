@@ -125,4 +125,109 @@ describe('StatisticsScreen daily and monthly views', () => {
     expect(screen.getByRole('img', { name: 'График доходов и расходов за Октябрь 2026' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Месяц' })).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('shows a comparison against the same elapsed period in the previous month', () => {
+    const comparisonTransactions: Transaction[] = [
+      {
+        id: 20, title: 'Текущий доход', categoryId: null, category: 'Доход', categoryIconName: 'Banknote',
+        amount: 1000, date: '1 окт', dateISO: '2026-10-01', accountId: 'acc-main', isIncome: true,
+      },
+      {
+        id: 21, title: 'Предыдущий доход', categoryId: null, category: 'Доход', categoryIconName: 'Banknote',
+        amount: 500, date: '1 сен', dateISO: '2026-09-01', accountId: 'acc-main', isIncome: true,
+      },
+    ];
+
+    render(
+      <StatisticsScreen
+        transactions={comparisonTransactions}
+        categories={[]}
+        onSelectTransaction={vi.fn()}
+      />,
+    );
+
+    const comparison = screen.getByRole('region', { name: 'Сравнение с предыдущим периодом' });
+    expect(comparison).toHaveTextContent('Чистый итог выше на 500 ₽');
+    expect(comparison).toHaveTextContent('1–26 окт 2026');
+    expect(comparison).toHaveTextContent('1–26 сен 2026');
+  });
+
+  it('updates the comparison when daily mode is selected', () => {
+    render(
+      <StatisticsScreen
+        transactions={transactions}
+        categories={[]}
+        onSelectTransaction={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'День' }));
+    const comparison = screen.getByRole('region', { name: 'Сравнение с предыдущим периодом' });
+    expect(comparison).toHaveTextContent('26 окт 2026');
+    expect(comparison).toHaveTextContent('25 окт 2026');
+    expect(comparison).toHaveTextContent('Чистый итог выше на 2 300 ₽');
+  });
+
+  it('describes a zero previous income baseline without inventing an infinite percentage', () => {
+    const onlyCurrentIncome: Transaction[] = [{
+      id: 30, title: 'Зарплата', categoryId: null, category: 'Доход', categoryIconName: 'Banknote',
+      amount: 2500, date: '26 окт', dateISO: '2026-10-26', accountId: 'acc-main', isIncome: true,
+    }];
+
+    render(
+      <StatisticsScreen
+        transactions={onlyCurrentIncome}
+        categories={[]}
+        onSelectTransaction={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Доходы' }));
+    const comparison = screen.getByRole('region', { name: 'Сравнение с предыдущим периодом' });
+    expect(comparison).toHaveTextContent('В предыдущем периоде доходов не было');
+    expect(comparison).not.toHaveTextContent('Infinity');
+  });
+
+  it('keeps the monthly chart pointer-driven without slider keyboard controls', () => {
+    render(
+      <StatisticsScreen
+        transactions={transactions}
+        categories={[]}
+        onSelectTransaction={vi.fn()}
+      />,
+    );
+
+    const graph = screen.getByRole('img', { name: 'График доходов и расходов за Октябрь 2026' });
+    expect(graph).not.toHaveAttribute('tabindex');
+    expect(graph).not.toHaveAttribute('aria-valuenow');
+    expect(graph).not.toHaveAttribute('aria-valuetext');
+  });
+
+  it('explains which expense category changed between comparable monthly periods', () => {
+    const categoryComparisonTransactions: Transaction[] = [
+      {
+        id: 50, title: 'Покупки сейчас', categoryId: 'food', category: 'Еда', categoryIconName: 'ShoppingCart',
+        amount: 900, date: '1 окт', dateISO: '2026-10-01', accountId: 'acc-main', isIncome: false,
+      },
+      {
+        id: 51, title: 'Покупки раньше', categoryId: 'food', category: 'Еда', categoryIconName: 'ShoppingCart',
+        amount: 600, date: '1 сен', dateISO: '2026-09-01', accountId: 'acc-main', isIncome: false,
+      },
+    ];
+
+    render(
+      <StatisticsScreen
+        transactions={categoryComparisonTransactions}
+        categories={[{ id: 'food', name: 'Продукты и еда', iconName: 'ShoppingCart', isIncome: false, isArchived: false }]}
+        onSelectTransaction={vi.fn()}
+      />,
+    );
+
+    const changes = screen.getByRole('region', { name: 'Изменения по категориям' });
+    expect(changes).toHaveTextContent('Продукты и еда');
+    expect(changes).toHaveTextContent('600 ₽ → 900 ₽');
+    expect(changes).toHaveTextContent('+300 ₽');
+    expect(changes).toHaveTextContent('1–26 сен 2026 → 1–26 окт 2026');
+  });
+
 });

@@ -36,12 +36,14 @@ import { ICON_GROUPS } from '@/data/iconsConfig';
 import { IconRenderer } from '@/components/IconRenderer';
 import { SettingsHeader } from '@/components/SettingsHeader';
 import type { Account } from '@/data/accounts';
-import type { CustomCategory } from '@/hooks/useCategories';
+import type { CustomCategory } from '@/data/categories';
 import type { Goal } from '@/data/goals';
-import type { BackgroundStyle, ThemeMode } from '@/hooks/useTheme';
+import type { BackgroundStyle, ThemeMode } from '@/data/settings';
 import {
   downloadJsonBackup,
+  downloadJsonBackupFromDatabase,
   downloadTransactionsCsv,
+  downloadTransactionsCsvFromDatabase,
   importCsvTransactionsToStorage,
   parseTransactionsCsv,
   readLastBackupAt,
@@ -51,6 +53,8 @@ import {
   type CsvImportMode,
   type ParsedTransactionsCsv,
 } from '@/backup/backupService';
+import { hasDatabaseBootstrap } from '@/storage/databaseStorage';
+import { formatStorageBytes, readBrowserStorageInfo, requestPersistentStorage, type BrowserStorageInfo } from '@/storage/browserStorage';
 
 interface SettingsScreenProps {
   onClose: () => void;
@@ -222,7 +226,7 @@ function CategoryEditor({
         </div>
         <div className="grid grid-cols-5 gap-2 rounded-2xl neu-inset p-2">
           {ICON_GROUPS[activeGroup].map((item) => (
-            <button key={item} type="button" onClick={() => setIconName(item)} aria-label={`Иконка ${item}`} aria-pressed={iconName === item} className={`flex aspect-square items-center justify-center rounded-xl transition-colors ${iconName === item ? 'bg-mint/20 text-emerald-600 ring-1 ring-mint dark:text-mint' : 'text-neutral-500 hover:bg-white/70 dark:text-neutral-400 dark:hover:bg-white/5'}`}>
+            <button key={item} type="button" onClick={() => setIconName(item)} aria-label={`Иконка ${item}`} aria-pressed={iconName === item} className={`flex aspect-square items-center justify-center rounded-xl transition-colors ${iconName === item ? 'bg-mint/20 text-mint ring-1 ring-mint dark:text-mint' : 'text-neutral-500 hover:bg-white/70 dark:text-neutral-400 dark:hover:bg-white/5'}`}>
               <IconRenderer name={item} className="h-5 w-5" />
             </button>
           ))}
@@ -266,16 +270,10 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const [csvMode, setCsvMode] = useState<CsvImportMode>('replace');
   const [message, setMessage] = useState<{ type: 'error' | 'info'; text: string } | null>(null);
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(() => readLastBackupAt());
+  const [browserStorageInfo, setBrowserStorageInfo] = useState<BrowserStorageInfo | null>(null);
+  const [isRequestingPersistentStorage, setIsRequestingPersistentStorage] = useState(false);
   const jsonFileRef = useRef<HTMLInputElement>(null);
   const csvFileRef = useRef<HTMLInputElement>(null);
-  const settingsRootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      settingsRootRef.current?.querySelector<HTMLElement>('[data-settings-focus-heading]')?.focus({ preventScroll: true });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [page]);
 
   useEffect(() => {
     if (page === 'profile') {
@@ -284,6 +282,15 @@ export function SettingsScreen(props: SettingsScreenProps) {
       setIsNegative(initialBalance < 0);
     }
   }, [page, userName, initialBalance]);
+
+  useEffect(() => {
+    if (page !== 'data') return;
+    let cancelled = false;
+    void readBrowserStorageInfo().then((info) => {
+      if (!cancelled) setBrowserStorageInfo(info);
+    });
+    return () => { cancelled = true; };
+  }, [page]);
 
   const backToRoot = () => {
     setPage('root');
@@ -304,16 +311,18 @@ export function SettingsScreen(props: SettingsScreenProps) {
     window.setTimeout(() => setPage('root'), 250);
   };
 
-  const handleJsonExport = () => {
+  const handleJsonExport = async () => {
     try {
-      const exportedAt = downloadJsonBackup({
-        accounts,
-        transactions,
-        categories,
-        goals,
-        profile: { userName, initialBalance, monthlyBudget },
-        settings: { themeMode, backgroundStyle },
-      });
+      const exportedAt = hasDatabaseBootstrap()
+        ? await downloadJsonBackupFromDatabase()
+        : downloadJsonBackup({
+          accounts,
+          transactions,
+          categories,
+          goals,
+          profile: { userName, initialBalance, monthlyBudget },
+          settings: { themeMode, backgroundStyle },
+        });
       setLastBackupAt(exportedAt);
       setMessage({ type: 'info', text: 'JSON-резервная копия сформирована на этом устройстве.' });
     } catch {
@@ -321,15 +330,36 @@ export function SettingsScreen(props: SettingsScreenProps) {
     }
   };
 
-  const handleCsvExport = () => {
+  const handleCsvExport = async () => {
     try {
-      downloadTransactionsCsv(transactions);
+      if (hasDatabaseBootstrap()) await downloadTransactionsCsvFromDatabase();
+      else downloadTransactionsCsv(transactions);
       setMessage({
         type: 'info',
         text: 'CSV v2 сформирован: включены доходы, расходы, переводы и ссылки на счета. Для переноса счетов, целей и настроек между устройствами используйте полный JSON-бэкап.',
       });
     } catch {
       setMessage({ type: 'error', text: 'Не удалось экспортировать историю в CSV.' });
+    }
+  };
+
+  const handlePersistentStorageRequest = async () => {
+    setIsRequestingPersistentStorage(true);
+    try {
+      const result = await requestPersistentStorage();
+      const info = await readBrowserStorageInfo();
+      setBrowserStorageInfo(info);
+      if (result === 'granted') {
+        setMessage({ type: 'info', text: 'Браузер разрешил постоянное хранение. Всё равно регулярно создавайте JSON-бэкап.' });
+      } else if (result === 'unsupported') {
+        setMessage({ type: 'info', text: 'Этот браузер не поддерживает запрос постоянного хранения. Продолжайте регулярно создавать JSON-бэкап.' });
+      } else {
+        setMessage({ type: 'error', text: 'Браузер не предоставил постоянное хранение. Приложение продолжит работать; регулярно создавайте JSON-бэкап.' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Не удалось запросить постоянное хранение. Приложение продолжит работать; регулярно создавайте JSON-бэкап.' });
+    } finally {
+      setIsRequestingPersistentStorage(false);
     }
   };
 
@@ -367,10 +397,10 @@ export function SettingsScreen(props: SettingsScreenProps) {
     }
   };
 
-  const confirmJsonRestore = () => {
+  const confirmJsonRestore = async () => {
     if (!pendingBackup) return;
     try {
-      restoreJsonBackupToStorage(pendingBackup);
+      await restoreJsonBackupToStorage(pendingBackup);
       window.location.reload();
     } catch (error) {
       setPendingBackup(null);
@@ -378,10 +408,10 @@ export function SettingsScreen(props: SettingsScreenProps) {
     }
   };
 
-  const confirmCsvImport = () => {
+  const confirmCsvImport = async () => {
     if (!pendingCsvTransactions) return;
     try {
-      importCsvTransactionsToStorage(pendingCsvTransactions.transactions, transactions, categories, csvMode, accounts, pendingCsvTransactions.schemaVersion);
+      await importCsvTransactionsToStorage(pendingCsvTransactions.transactions, transactions, categories, csvMode, accounts, pendingCsvTransactions.schemaVersion);
       window.location.reload();
     } catch (error) {
       setPendingCsvTransactions(null);
@@ -420,7 +450,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
   const childPageTitle = page === 'root' ? null : CHILD_PAGE_TITLES[page];
 
   return (
-    <div ref={settingsRootRef} className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-transparent text-neutral-900 dark:text-white">
+    <div className="fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-transparent text-neutral-900 dark:text-white">
       <div className="mx-auto min-h-full max-w-md pb-[calc(env(safe-area-inset-bottom)_+_32px)] pt-[calc(env(safe-area-inset-top)_+_12px)]">
         {childPageTitle && <SettingsHeader title={childPageTitle} onBack={backToRoot} />}
 
@@ -433,7 +463,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
               </button>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-neutral-400 dark:text-neutral-500">NEO FINANCE</p>
-                <h1 tabIndex={-1} data-settings-focus-heading className="text-2xl font-semibold tracking-tight text-neutral-950 outline-none dark:text-white">Настройки</h1>
+                <h1 className="text-2xl font-semibold tracking-tight text-neutral-950 outline-none dark:text-white">Настройки</h1>
               </div>
             </header>
 
@@ -483,13 +513,13 @@ export function SettingsScreen(props: SettingsScreenProps) {
                   <input id="settings-profile-balance" inputMode="numeric" value={balanceInput ? formatCurrency(Number(balanceInput)) : ''} onChange={(event) => setBalanceInput(event.target.value.replace(/\D/g, '').slice(0, 12))} placeholder="0" className="min-w-0 flex-1 bg-transparent text-sm tabular-nums text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-white" aria-describedby="settings-profile-balance-hint" />
                   <span className="ml-3 text-sm text-neutral-400">₽</span>
                 </div>
-                <button id="settings-profile-balance-sign" type="button" onClick={() => setIsNegative((value) => !value)} aria-pressed={isNegative} className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/70 ${isNegative ? 'bg-red-500/10 text-red-500 dark:text-red-400' : 'neu-inset text-neutral-500 dark:text-neutral-400'}`}>
+                <button id="settings-profile-balance-sign" type="button" onClick={() => setIsNegative((value) => !value)} aria-pressed={isNegative} className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-medium transition-colors duration-200 ${isNegative ? 'bg-red-500/10 text-red-500 dark:text-red-400' : 'neu-inset text-neutral-500 dark:text-neutral-400'}`}>
                   <Minus className="h-3 w-3" aria-hidden="true" />
                   {isNegative ? 'Отрицательный баланс' : 'Сделать отрицательным'}
                 </button>
                 <p id="settings-profile-balance-hint" className="mt-2 text-[11px] leading-5 text-neutral-400 dark:text-neutral-500">Отрицательное значение удобно для долгов и овердрафта.</p>
               </div>
-              {message && <p role="status" className={`text-xs leading-5 ${message.type === 'error' ? 'text-red-500' : 'text-emerald-600 dark:text-mint'}`}>{message.text}</p>}
+              {message && <p role="status" className={`text-xs leading-5 ${message.type === 'error' ? 'text-red-500' : 'text-mint'}`}>{message.text}</p>}
               <div className="pt-2"><PrimaryButton onClick={handleProfileSave}><Check className="h-4 w-4" /> Сохранить изменения</PrimaryButton></div>
             </div>
           </>
@@ -503,17 +533,17 @@ export function SettingsScreen(props: SettingsScreenProps) {
               <button type="button" onClick={() => setThemeMode('system')} className="flex min-h-[70px] w-full items-center gap-3 px-4 py-3 text-left active:bg-neutral-100/80 dark:active:bg-white/5">
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl neu-inset"><Contrast className="h-5 w-5 text-neutral-600 dark:text-neutral-300" /></span>
                 <span className="flex-1"><span className="block text-sm font-medium">Системная</span><span className="mt-0.5 block text-xs text-neutral-400">Следовать теме устройства</span></span>
-                {themeMode === 'system' && <Check className="h-5 w-5 text-emerald-500" />}
+                {themeMode === 'system' && <Check className="h-5 w-5 text-mint" />}
               </button>
               <button type="button" onClick={() => setThemeMode('light')} className="flex min-h-[70px] w-full items-center gap-3 border-t border-neutral-100 px-4 py-3 text-left active:bg-neutral-100/80 dark:border-white/[0.06] dark:active:bg-white/5">
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl neu-inset"><Sun className="h-5 w-5 text-neutral-600 dark:text-neutral-300" /></span>
                 <span className="flex-1"><span className="block text-sm font-medium">Светлая</span><span className="mt-0.5 block text-xs text-neutral-400">Светлый фон и контрастный текст</span></span>
-                {themeMode === 'light' && <Check className="h-5 w-5 text-emerald-500" />}
+                {themeMode === 'light' && <Check className="h-5 w-5 text-mint" />}
               </button>
               <button type="button" onClick={() => setThemeMode('dark')} className="flex min-h-[70px] w-full items-center gap-3 border-t border-neutral-100 px-4 py-3 text-left active:bg-neutral-100/80 dark:border-white/[0.06] dark:active:bg-white/5">
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl neu-inset"><Moon className="h-5 w-5 text-neutral-600 dark:text-neutral-300" /></span>
                 <span className="flex-1"><span className="block text-sm font-medium">Тёмная</span><span className="mt-0.5 block text-xs text-neutral-400">Тёмный интерфейс</span></span>
-                {themeMode === 'dark' && <Check className="h-5 w-5 text-emerald-500" />}
+                {themeMode === 'dark' && <Check className="h-5 w-5 text-mint" />}
               </button>
             </SettingsCard>
             <SectionLabel>Фон приложения</SectionLabel>
@@ -531,7 +561,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
                   <span className="block text-sm font-medium">Градиентный</span>
                   <span className="mt-0.5 block text-xs text-neutral-400 dark:text-neutral-500">Мягкие цветовые переходы на фоне</span>
                 </span>
-                {backgroundStyle === 'gradient' && <Check className="h-5 w-5 text-emerald-500" />}
+                {backgroundStyle === 'gradient' && <Check className="h-5 w-5 text-mint" />}
               </button>
               <button
                 type="button"
@@ -546,7 +576,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
                   <span className="block text-sm font-medium">Сплошной</span>
                   <span className="mt-0.5 block text-xs text-neutral-400 dark:text-neutral-500">Чистый белый или чёрный фон</span>
                 </span>
-                {backgroundStyle === 'solid' && <Check className="h-5 w-5 text-emerald-500" />}
+                {backgroundStyle === 'solid' && <Check className="h-5 w-5 text-mint" />}
               </button>
             </SettingsCard>
             <SectionLabel>Движение</SectionLabel>
@@ -565,7 +595,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
               <div className="flex min-h-[72px] items-center gap-3 px-4 py-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-2xl neu-inset"><Globe2 className="h-5 w-5 text-neutral-600 dark:text-neutral-300" /></span>
                 <span className="flex-1"><span className="block text-sm font-medium">Русский</span><span className="mt-0.5 block text-xs text-neutral-400">Текущий язык интерфейса</span></span>
-                <Check className="h-5 w-5 text-emerald-500" />
+                <Check className="h-5 w-5 text-mint" />
               </div>
               <div className="flex items-start gap-3 border-t border-neutral-100 px-4 py-4 dark:border-white/[0.06]">
                 <Languages className="mt-0.5 h-5 w-5 shrink-0 text-neutral-400" />
@@ -579,7 +609,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
           <>
             <div className="rounded-3xl neu-card p-4">
               <div className="flex items-start gap-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-mint/15 text-emerald-600 dark:text-mint"><ShieldCheck className="h-5 w-5" /></span>
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-mint/15 text-mint"><ShieldCheck className="h-5 w-5" /></span>
                 <div><h2 className="text-sm font-semibold">Защитите свои финансовые данные</h2><p className="mt-1 text-xs leading-5 text-neutral-500 dark:text-neutral-400">JSON — полный бэкап счетов, операций, целей и настроек. CSV v2 включает операции, переводы и ID счетов; для импорта ссылки на счета должны существовать в приложении. Для переноса на другое устройство используйте JSON.</p></div>
               </div>
               <div className="mt-4 border-t border-neutral-100 pt-3 dark:border-white/[0.06]">
@@ -589,7 +619,49 @@ export function SettingsScreen(props: SettingsScreenProps) {
             </div>
 
             {storageWriteFailed && <div role="status" className="mt-4 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-5 text-amber-700 dark:text-amber-300">Браузер не подтвердил сохранение некоторых изменений. Перед импортом сохраните текущие данные в файл и проверьте свободное место в хранилище.</div>}
-            {message && <div role={message.type === 'error' ? 'alert' : 'status'} className={`mt-4 rounded-2xl p-3 text-xs leading-5 ${message.type === 'error' ? 'bg-red-500/10 text-red-600 dark:text-red-300' : 'bg-emerald-500/10 text-emerald-700 dark:text-mint'}`}>{message.text}</div>}
+            {message && <div role={message.type === 'error' ? 'alert' : 'status'} className={`mt-4 rounded-2xl p-3 text-xs leading-5 ${message.type === 'error' ? 'bg-red-500/10 text-red-600 dark:text-red-300' : 'bg-emerald-500/10 text-mint'}`}>{message.text}</div>}
+
+            <SectionLabel>Хранение на устройстве</SectionLabel>
+            <SettingsCard>
+              <div className="flex items-start gap-3 px-4 py-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl neu-inset"><ShieldCheck className="h-5 w-5 text-neutral-600 dark:text-neutral-300" /></span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">
+                    {browserStorageInfo?.persistence === 'granted'
+                      ? 'Постоянное хранение включено'
+                      : browserStorageInfo?.persistence === 'not-granted'
+                        ? 'Постоянное хранение не предоставлено'
+                        : browserStorageInfo?.persistence === 'unsupported'
+                          ? 'Статус хранения недоступен в этом браузере'
+                          : browserStorageInfo?.persistence === 'unknown'
+                            ? 'Не удалось проверить статус хранения'
+                            : 'Проверяем возможности браузера…'}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-neutral-500 dark:text-neutral-400">
+                    {browserStorageInfo?.persistence === 'granted'
+                      ? 'Браузер снизил риск автоматической очистки данных при нехватке места.'
+                      : browserStorageInfo?.persistence === 'not-granted'
+                        ? 'Без этого разрешения браузер может автоматически очистить локальные данные при нехватке места.'
+                        : browserStorageInfo?.persistence === 'unsupported'
+                          ? 'Браузер не предоставляет интерфейс для проверки или запроса постоянного хранения.'
+                          : browserStorageInfo?.persistence === 'unknown'
+                            ? 'Браузер не смог сообщить, предоставлено ли постоянное хранение.'
+                            : 'Проверяем, доступно ли постоянное хранение в этом браузере.'}
+                  </p>
+                  {browserStorageInfo && browserStorageInfo.usageBytes !== null && browserStorageInfo.quotaBytes !== null && (
+                    <p className="mt-2 text-[11px] leading-5 text-neutral-400 dark:text-neutral-500">
+                      Используется примерно {formatStorageBytes(browserStorageInfo.usageBytes)} из {formatStorageBytes(browserStorageInfo.quotaBytes)} доступного хранилища этого сайта.
+                    </p>
+                  )}
+                </div>
+              </div>
+              {browserStorageInfo && browserStorageInfo.persistence !== 'granted' && browserStorageInfo.persistence !== 'unsupported' && (
+                <button type="button" onClick={() => void handlePersistentStorageRequest()} disabled={isRequestingPersistentStorage} className="min-h-12 w-full border-t border-neutral-100 px-4 py-3 text-left text-sm font-medium text-neutral-700 disabled:opacity-50 dark:border-white/[0.06] dark:text-neutral-200">
+                  {isRequestingPersistentStorage ? 'Запрашиваем разрешение…' : 'Запросить постоянное хранение'}
+                </button>
+              )}
+            </SettingsCard>
+            <p className="mt-2 px-1 text-[11px] leading-5 text-neutral-400 dark:text-neutral-500">Это снижает риск автоматической очистки, но не заменяет резервную копию и не защищает от ручной очистки браузера, поломки или потери устройства.</p>
 
             <SectionLabel>Полная резервная копия</SectionLabel>
             <SettingsCard>
@@ -651,7 +723,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
                     </SettingsCard>
                   </>
                 )}
-                {message && <p role="status" className="mt-4 text-xs text-emerald-600 dark:text-mint">{message.text}</p>}
+                {message && <p role="status" className="mt-4 text-xs text-mint">{message.text}</p>}
               </>
             ) : (
               <>
@@ -680,7 +752,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
             </div>
             <SectionLabel>Приватность и данные</SectionLabel>
             <SettingsCard>
-              <SettingsRow icon={ShieldCheck} title="Локальное хранение" description="Данные хранятся локально в этом браузере без шифрования. Защитите устройство и регулярно сохраняйте JSON-копию." trailing={<Check className="h-4 w-4 text-emerald-500" />} />
+              <SettingsRow icon={ShieldCheck} title="Локальное хранение" description="Данные хранятся локально в этом браузере без шифрования. Защитите устройство и регулярно сохраняйте JSON-копию." trailing={<Check className="h-4 w-4 text-mint" />} />
               <SettingsRow icon={FileJson} title="Резервная копия" description="JSON позволяет перенести или восстановить счета, профиль, бюджет, категории и историю." onClick={() => setPage('data')} />
             </SettingsCard>
             <p className="mt-5 px-1 text-xs leading-5 text-neutral-400 dark:text-neutral-500">Neo Finance — независимый проект. Регулярно сохраняйте JSON-копию и храните её в безопасном месте.</p>

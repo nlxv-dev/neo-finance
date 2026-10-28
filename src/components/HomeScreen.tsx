@@ -3,7 +3,7 @@ import { BudgetIndicator } from '@/components/ui/BudgetIndicator';
 import { TransactionList } from '@/components/TransactionList';
 import { BalanceCardCarousel } from '@/components/BalanceCardCarousel';
 import type { Transaction } from '@/data/mockData';
-import type { CustomCategory } from '@/hooks/useCategories';
+import type { CustomCategory } from '@/data/categories';
 import type { Account } from '@/data/accounts';
 
 interface HomeScreenProps {
@@ -53,8 +53,12 @@ export function HomeScreen({
             className="flex items-center gap-2 transition-transform active:scale-95 "
             aria-label="Открыть настройки"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl neu-card-sm">
-              <span className="text-sm font-bold gradient-text">N</span>
+            <div className="h-9 w-9 overflow-hidden rounded-xl neu-card-sm">
+              <img
+                src={`${import.meta.env.BASE_URL}pwa-192x192.png`}
+                alt=""
+                className="h-full w-full object-cover"
+              />
             </div>
 
             <div className="text-left">

@@ -8,7 +8,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import type { CustomCategory } from '@/hooks/useCategories';
+import type { CustomCategory } from '@/data/categories';
 import type { Account } from '@/data/accounts';
 import { MAIN_ACCOUNT_ID } from '@/data/accounts';
 import { IconRenderer } from '@/components/IconRenderer';
@@ -250,7 +250,6 @@ export function AddTransactionSheet({
       open={open}
       onClose={onClose}
       onExited={resetForm}
-      onEscape={closeOrHideKeyboard}
       onBackdropClick={closeOrHideKeyboard}
       onPanelClick={(event) => {
         if (!keyboardOpen) return;
@@ -309,11 +308,8 @@ export function AddTransactionSheet({
                 <div className="flex w-full items-baseline justify-center">
                   <AmountTrigger
                     value={amount}
-                    onChange={setAmount}
                     keyboardOpen={keyboardOpen}
                     onToggleKeyboard={() => setKeyboardOpen((value) => !value)}
-                    onOpenKeyboard={() => setKeyboardOpen(true)}
-                    onCloseKeyboard={() => setKeyboardOpen(false)}
                     label="Сумма транзакции в рублях"
                     keyboardId="transaction-amount-keyboard"
                     showCurrency={false}

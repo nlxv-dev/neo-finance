@@ -2,6 +2,7 @@ import { AlertTriangle, Download, FileJson, HardDrive, Upload } from 'lucide-rea
 import { useRef, useState } from 'react';
 import { restoreJsonBackupToStorage, validateBackupFile, type BackupFile } from '@/backup/backupService';
 import type { StorageIssue } from '@/storage/safeLocalStorage';
+import { STORAGE_KEYS } from '@/storage/storageKeys';
 
 interface StorageRecoveryNoticeProps {
   issues: StorageIssue[];
@@ -9,15 +10,15 @@ interface StorageRecoveryNoticeProps {
 }
 
 const KEY_LABELS: Record<string, string> = {
-  'fintrack-transactions': 'Транзакции',
-  'fintrack-accounts': 'Счета',
-  'fintrack-goals': 'Цели',
-  neo_finance_categories: 'Категории',
-  'fintrack-user-name': 'Имя профиля',
-  'fintrack-initial-balance': 'Начальный баланс',
-  'fintrack-monthly-budget': 'Месячный бюджет',
-  'fintrack-theme': 'Тема оформления',
-  'fintrack-background-style': 'Фон приложения',
+  [STORAGE_KEYS.transactions]: 'Транзакции',
+  [STORAGE_KEYS.accounts]: 'Счета',
+  [STORAGE_KEYS.goals]: 'Цели',
+  [STORAGE_KEYS.categories]: 'Категории',
+  [STORAGE_KEYS.userName]: 'Имя профиля',
+  [STORAGE_KEYS.initialBalance]: 'Начальный баланс',
+  [STORAGE_KEYS.monthlyBudget]: 'Месячный бюджет',
+  [STORAGE_KEYS.theme]: 'Тема оформления',
+  [STORAGE_KEYS.backgroundStyle]: 'Фон приложения',
 };
 
 function getIssueLabel(issue: StorageIssue): string {
@@ -59,10 +60,10 @@ export function StorageRecoveryNotice({ issues, onDownloadRecovery }: StorageRec
     }
   };
 
-  const handleRestore = () => {
+  const handleRestore = async () => {
     if (!pendingBackup) return;
     try {
-      restoreJsonBackupToStorage(pendingBackup);
+      await restoreJsonBackupToStorage(pendingBackup);
       window.location.reload();
     } catch (error) {
       setPendingBackup(null);
@@ -99,7 +100,7 @@ export function StorageRecoveryNotice({ issues, onDownloadRecovery }: StorageRec
           </div>
           {pendingBackup ? (
             <div className="mt-4 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700 dark:text-emerald-300"><FileJson className="h-4 w-4" /> Резервная копия проверена</div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-mint dark:text-mint"><FileJson className="h-4 w-4" /> Резервная копия проверена</div>
               <p className="mt-1 text-xs leading-5 text-neutral-600 dark:text-neutral-300">Будут восстановлены {pendingBackup.data.accounts.length} счетов, {pendingBackup.data.goals.length} целей, {pendingBackup.data.transactions.length} транзакций и {pendingBackup.data.categories.length} категорий, а также профиль, бюджет и настройки оформления. Повреждённые локальные значения будут заменены.</p>
               <button type="button" onClick={handleRestore} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-mint to-indigoblue px-3 py-2 text-sm font-semibold text-neutral-950"><Upload className="h-4 w-4" /> Восстановить из JSON</button>
             </div>
@@ -140,7 +141,7 @@ export function StorageRecoveryNotice({ issues, onDownloadRecovery }: StorageRec
           <button
             type="button"
             onClick={onDownloadRecovery}
-            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-neutral-100 px-3 py-2 text-xs font-semibold text-neutral-900 transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/70 dark:bg-white/10 dark:text-white"
+            className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl bg-neutral-100 px-3 py-2 text-xs font-semibold text-neutral-900 transition-transform active:scale-[0.98] dark:bg-white/10 dark:text-white"
           >
             <Download className="h-4 w-4" aria-hidden="true" />
             Скачать восстановительный файл

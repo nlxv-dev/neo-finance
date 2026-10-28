@@ -146,7 +146,6 @@ export function AccountEditSheet({
     <BottomSheet
       open={open}
       onClose={onClose}
-      onEscape={() => (keyboardOpen ? setKeyboardOpen(false) : onClose())}
       onBackdropClick={() => (keyboardOpen ? setKeyboardOpen(false) : onClose())}
       onPanelClick={(event) => {
         if (!keyboardOpen) return;
@@ -208,11 +207,8 @@ export function AccountEditSheet({
                 {isNegative && <span className="mr-1 text-2xl font-light text-red-500">−</span>}
                 <AmountTrigger
                   value={balanceDigits}
-                  onChange={(value) => setBalanceDigits(value.replace(/\D/g, '').slice(0, 12))}
                   keyboardOpen={keyboardOpen}
                   onToggleKeyboard={() => setKeyboardOpen((value) => !value)}
-                  onOpenKeyboard={() => setKeyboardOpen(true)}
-                  onCloseKeyboard={() => setKeyboardOpen(false)}
                   label={`Начальный баланс в ${currency}`}
                   keyboardId="account-balance-keyboard"
                   showCurrency={false}
@@ -281,7 +277,7 @@ export function AccountEditSheet({
                     if (error) setError('');
                   }}
                   placeholder="Например, Основная карта"
-                  className="mb-1 w-full rounded-xl neu-inset px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus-visible:ring-2 focus-visible:ring-mint/50 dark:text-white"
+                  className="mb-1 w-full rounded-xl neu-inset px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-white"
                 />
                 {error && <p role="alert" className="mb-3 text-xs text-red-500">{error}</p>}
 

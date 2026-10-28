@@ -62,7 +62,6 @@ export function BalanceAdjustSheet({
     <BottomSheet
       open={open}
       onClose={onClose}
-      onEscape={closeOrHideKeyboard}
       onBackdropClick={closeOrHideKeyboard}
       onPanelClick={(event) => {
         if (!keyboardOpen) return;
@@ -100,11 +99,8 @@ export function BalanceAdjustSheet({
 
             <AmountTrigger
               value={digits}
-              onChange={setDigits}
               keyboardOpen={keyboardOpen}
               onToggleKeyboard={() => setKeyboardOpen((value) => !value)}
-              onOpenKeyboard={() => setKeyboardOpen(true)}
-              onCloseKeyboard={() => setKeyboardOpen(false)}
               label={`Новое значение баланса счёта «${accountName}» в ${currency}`}
               keyboardId="balance-amount-keyboard"
             />

@@ -10,7 +10,7 @@ import {
 import { formatCurrency, type Transaction } from '@/data/mockData';
 import type { Account } from '@/data/accounts';
 import { MAIN_ACCOUNT_ID } from '@/data/accounts';
-import type { CustomCategory } from '@/hooks/useCategories';
+import type { CustomCategory } from '@/data/categories';
 import { IconRenderer } from '@/components/IconRenderer';
 import { DeleteConfirmationPanel } from '@/components/DeleteConfirmationPanel';
 import { AmountKeyboard, AmountTrigger } from '@/components/AmountKeyboard';
@@ -181,7 +181,6 @@ export function TransactionDetailSheet({
       open={open}
       onClose={handleCloseSheet}
       onExited={handleExited}
-      onEscape={closeOrHideKeyboard}
       onBackdropClick={closeOrHideKeyboard}
       onPanelClick={(event) => {
         if (mode !== 'edit' || !keyboardOpen) return;
@@ -284,7 +283,7 @@ function ViewMode({
             <IconRenderer
               name={categoryIconName}
               className={`h-7 w-7 ${
-                transaction.isIncome ? 'text-green-700 dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
+                transaction.isIncome ? 'text-mint' : 'text-neutral-500 dark:text-neutral-400'
               }`}
             />
           )}
@@ -297,7 +296,7 @@ function ViewMode({
           className={`mt-2 flex items-center gap-1 text-xs font-medium ${
             transaction.isTransfer
               ? 'text-indigoblue dark:text-indigo-300'
-              : transaction.isIncome ? 'text-green-700 dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
+              : transaction.isIncome ? 'text-mint' : 'text-neutral-500 dark:text-neutral-400'
           }`}
         >
           {transaction.isTransfer ? (
@@ -439,11 +438,8 @@ function EditMode({
         <div className="flex w-full items-baseline justify-center">
           <AmountTrigger
             value={editAmount}
-            onChange={setEditAmount}
             keyboardOpen={keyboardOpen}
             onToggleKeyboard={() => setKeyboardOpen(!keyboardOpen)}
-            onOpenKeyboard={() => setKeyboardOpen(true)}
-            onCloseKeyboard={() => setKeyboardOpen(false)}
             label="Сумма редактируемой транзакции"
             keyboardId="edit-transaction-amount-keyboard"
             size="medium"
@@ -513,7 +509,7 @@ function EditMode({
           <div className="flex shrink-0 gap-2.5">
             <button
               onClick={onCancel}
-              className="flex-1 rounded-2xl py-3 text-sm font-medium text-neutral-500 neu-card-sm transition-all duration-200 active:scale-[0.98]  dark:text-neutral-400"
+              className="flex-1 rounded-2xl py-3 text-sm font-medium text-neutral-500 neu-card-sm transition-all duration-200 active:scale-[0.98] dark:text-neutral-400"
             >
               Отмена
             </button>

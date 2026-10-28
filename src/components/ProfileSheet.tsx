@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Minus, Trash2, User, Wallet } from 'lucide-react';
 import { formatCurrency } from '@/data/mockData';
 import { BottomSheet } from '@/components/ui/BottomSheet';
@@ -27,7 +27,6 @@ export function ProfileSheet({
   const [isNegative, setIsNegative] = useState(initialBalance < 0);
   const [confirmReset, setConfirmReset] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -37,8 +36,6 @@ export function ProfileSheet({
     setIsNegative(initialBalance < 0);
     setConfirmReset(false);
     setHasChanges(false);
-    const timer = window.setTimeout(() => nameRef.current?.focus(), 350);
-    return () => window.clearTimeout(timer);
   }, [open, userName, initialBalance]);
 
   const handleNameChange = (value: string) => {
@@ -89,7 +86,6 @@ export function ProfileSheet({
             Имя
           </label>
           <input
-            ref={nameRef}
             type="text"
             value={nameInput}
             onChange={(event) => handleNameChange(event.target.value)}

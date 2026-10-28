@@ -6,11 +6,8 @@ import { appendAmountDigit } from '@/data/amountInput';
 
 interface AmountTriggerProps {
   value: string;
-  onChange: (value: string) => void;
   keyboardOpen: boolean;
   onToggleKeyboard: () => void;
-  onOpenKeyboard: () => void;
-  onCloseKeyboard: () => void;
   label: string;
   keyboardId: string;
   size?: 'large' | 'medium';
@@ -23,11 +20,8 @@ interface AmountTriggerProps {
 /** Button styled as the amount field. Using a button guarantees no OS keyboard is summoned. */
 export function AmountTrigger({
   value,
-  onChange,
   keyboardOpen,
   onToggleKeyboard,
-  onOpenKeyboard,
-  onCloseKeyboard,
   label,
   keyboardId,
   size = 'large',
@@ -44,19 +38,7 @@ export function AmountTrigger({
       aria-expanded={keyboardOpen}
       aria-controls={keyboardOpen ? keyboardId : undefined}
       onClick={onToggleKeyboard}
-      onKeyDown={(event) => {
-        if (/^\d$/.test(event.key)) {
-          event.preventDefault();
-          onChange(appendAmountDigit(value, event.key));
-          onOpenKeyboard();
-        } else if (event.key === 'Backspace') {
-          event.preventDefault();
-          onChange(value.slice(0, -1));
-        } else if (event.key === 'Escape') {
-          onCloseKeyboard();
-        }
-      }}
-      className={`min-h-[56px] min-w-[112px] flex-1 cursor-pointer rounded-xl bg-transparent px-2 text-center font-light tracking-tight text-neutral-900 outline-none tabular-nums transition-colors focus-visible:ring-2 focus-visible:ring-mint/50 dark:text-white ${size === 'large' ? 'text-[clamp(2rem,10vw,3rem)]' : 'text-[clamp(1.75rem,9vw,2.25rem)]'}`}
+      className={`min-h-[56px] min-w-[112px] flex-1 cursor-pointer rounded-xl bg-transparent px-2 text-center font-light tracking-tight text-neutral-900 outline-none tabular-nums transition-colors dark:text-white ${size === 'large' ? 'text-[clamp(2rem,10vw,3rem)]' : 'text-[clamp(1.75rem,9vw,2.25rem)]'}`}
     >
       <span className={displayedValue ? '' : 'text-neutral-300 dark:text-neutral-600'}>
         {displayedValue || (showZeroPlaceholder ? '0' : '')}
@@ -192,7 +174,7 @@ export function AmountKeyboard({
           onPointerCancel={cancelLongPress}
           onContextMenu={(event) => event.preventDefault()}
           onClick={deleteLastDigit}
-          className="col-start-3 flex min-h-[48px] items-center justify-center rounded-2xl bg-transparent text-neutral-500 transition-opacity duration-100 active:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-300 dark:text-neutral-300 dark:focus-visible:ring-white/25"
+          className="col-start-3 flex min-h-[48px] items-center justify-center rounded-2xl bg-transparent text-neutral-500 transition-opacity duration-100 active:opacity-60 dark:text-neutral-300 "
           aria-label="Удалить последнюю цифру; удерживайте для очистки суммы"
           title="Удерживайте, чтобы очистить сумму"
         >

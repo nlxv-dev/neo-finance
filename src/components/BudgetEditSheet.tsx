@@ -55,7 +55,6 @@ export function BudgetEditSheet({
     <BottomSheet
       open={open}
       onClose={onClose}
-      onEscape={closeOrHideKeyboard}
       onBackdropClick={closeOrHideKeyboard}
       onPanelClick={(event) => {
         if (!keyboardOpen) return;
@@ -86,11 +85,8 @@ export function BudgetEditSheet({
           <div className="flex items-baseline justify-center">
             <AmountTrigger
               value={digits}
-              onChange={setDigits}
               keyboardOpen={keyboardOpen}
               onToggleKeyboard={() => setKeyboardOpen((value) => !value)}
-              onOpenKeyboard={() => setKeyboardOpen(true)}
-              onCloseKeyboard={() => setKeyboardOpen(false)}
               label="Месячный бюджет в рублях"
               keyboardId="budget-amount-keyboard"
             />

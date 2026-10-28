@@ -193,7 +193,7 @@
   }
 
   .gradient-text {
-    background: linear-gradient(135deg, #4ade80, #6366f1);
+    background: linear-gradient(135deg, #05d9a4, #6366f1);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -205,12 +205,6 @@
   position: relative;
   outline: none;
   touch-action: pan-y;
-}
-
-.balance-carousel:focus-visible {
-  border-radius: 28px;
-  outline: 2px solid rgba(16, 185, 129, 0.5);
-  outline-offset: 5px;
 }
 
 .balance-card-stack {
@@ -309,7 +303,6 @@
 }
 
 .neo-balance-card:not(:disabled):active { transform: scale(0.993); }
-.neo-balance-card:focus-visible { outline: 2px solid #10b981; outline-offset: 3px; }
 .neo-balance-card:disabled { cursor: not-allowed; opacity: 0.62; }
 
 .neo-balance-card::before,
@@ -634,8 +627,8 @@
 .neo-add-card-plus {
   position: relative;
   z-index: 1;
-  color: #10b981;
-  filter: drop-shadow(0 2px 8px rgba(16, 185, 129, 0.12));
+  color: #05d9a4;
+  filter: drop-shadow(0 2px 8px rgba(5, 217, 164, 0.12));
 }
 .dark .neo-balance-card--add {
   color: #6ee7c2;
@@ -667,10 +660,6 @@
   background: transparent;
   cursor: pointer;
 }
-.balance-carousel-dot-hit:focus-visible {
-  outline: 2px solid #10b981;
-  outline-offset: 0;
-}
 .balance-carousel-dot {
   display: block;
   width: 6px;
@@ -681,7 +670,7 @@
 }
 .balance-carousel-dot-hit.is-active .balance-carousel-dot {
   width: 18px;
-  background: #10b981;
+  background: #05d9a4;
 }
 .dark .balance-carousel-dot { background: rgba(224, 235, 230, 0.22); }
 .dark .balance-carousel-dot-hit.is-active .balance-carousel-dot { background: #05d9a4; }
@@ -723,13 +712,13 @@
   color: #a3a3a3;
 }
 
-/* Mint remains the visual accent; its text/icon foreground uses a darker shade in light mode. */
+/* One consistent vivid mint accent across light and dark themes. */
 .text-mint {
-  color: #15803d;
+  color: #05d9a4;
 }
 
 .dark .text-mint {
-  color: #4ade80;
+  color: #05d9a4;
 }
 
 input::placeholder,
@@ -743,12 +732,42 @@ textarea::placeholder {
   color: #a3a3a3;
 }
 
-/* Preserve the quiet visual language while making keyboard focus unambiguous. */
-:focus-visible {
-  outline: 2px solid #15803d;
-  outline-offset: 2px;
+/* Neo Finance uses a clean, outline-free visual language for focused controls. */
+*:focus-visible {
+  outline: none !important;
 }
 
-.dark :focus-visible {
-  outline-color: #4ade80;
+
+/* Quiet amount/card skeletons used while Dexie is preparing the first snapshot. */
+.neo-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(120, 128, 136, 0.12);
+  isolation: isolate;
+}
+.dark .neo-skeleton {
+  background: rgba(255, 255, 255, 0.075);
+}
+.neo-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform: translateX(-100%);
+  background: linear-gradient(100deg, transparent 15%, rgba(255, 255, 255, 0.42) 50%, transparent 85%);
+  animation: neo-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+.dark .neo-skeleton::after {
+  background: linear-gradient(100deg, transparent 15%, rgba(255, 255, 255, 0.10) 50%, transparent 85%);
+}
+@keyframes neo-skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+.neo-startup-balance-card {
+  cursor: default;
+  pointer-events: none;
+}
+.neo-startup-balance-card::before,
+.neo-startup-balance-card::after {
+  display: none;
 }

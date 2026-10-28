@@ -1,15 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useState } from 'react';
 import AddTransactionSheet from '@/components/AddTransactionSheet';
 import { BalanceAdjustSheet } from '@/components/BalanceAdjustSheet';
 import { AccountEditSheet } from '@/components/AccountEditSheet';
 import { BudgetEditSheet } from '@/components/BudgetEditSheet';
 import { HomeScreen } from '@/components/HomeScreen';
-import { SettingsScreen } from '@/components/SettingsScreen';
-import { StatisticsScreen } from '@/components/StatisticsScreen';
-import { WalletScreen } from '@/components/WalletScreen';
-import { GoalsScreen } from '@/components/GoalsScreen';
 import { TransferSheet, type TransferDraft } from '@/components/TransferSheet';
 import { StorageRecoveryNotice } from '@/components/StorageRecoveryNotice';
+import { PwaUpdatePrompt } from '@/components/PwaUpdatePrompt';
 import { TabBar, type AppTab } from '@/components/TabBar';
 import { TransactionDetailSheet } from '@/components/TransactionDetailSheet';
 import { MAIN_ACCOUNT_ID } from '@/data/accounts';
@@ -24,29 +21,79 @@ import { useTransactions } from '@/hooks/useTransactions';
 import { useGoals } from '@/hooks/useGoals';
 import { calculateAccountOpeningBalanceForTargetBalance, calculateAllAccountBalances, calculateBalancesByCurrency, sumAccountBalancesByCurrency } from '@/utils/financialMath';
 import { filterTransactionsForCurrency, getOtherCurrencyCodes } from '@/utils/accountAnalytics';
-import { downloadRecoverySnapshot, requestPersistentStorage } from '@/storage/safeLocalStorage';
+import { downloadRecoverySnapshot } from '@/storage/safeLocalStorage';
 
 type ActiveSheet = 'add' | 'detail' | 'transfer' | 'profile' | 'budget' | 'balance' | 'account-add' | null;
 
-// Keep visited screens mounted without letting unrelated App state updates
-// force every screen and its transaction list to re-render.
+// Keep the smaller screen chunks, but request them immediately in parallel with
+// database initialization. Cached promises also ensure React.lazy reuses the same load.
+function cachedImport<T>(loader: () => Promise<T>): () => Promise<T> {
+  let promise: Promise<T> | null = null;
+  return () => {
+    if (!promise) promise = loader();
+    return promise;
+  };
+}
+
+const loadSettingsScreen = cachedImport(() =>
+  import('@/components/SettingsScreen').then(({ SettingsScreen }) => ({ default: SettingsScreen })),
+);
+const loadStatisticsScreen = cachedImport(() =>
+  import('@/components/StatisticsScreen').then(({ StatisticsScreen }) => ({ default: memo(StatisticsScreen) })),
+);
+const loadWalletScreen = cachedImport(() =>
+  import('@/components/WalletScreen').then(({ WalletScreen }) => ({ default: memo(WalletScreen) })),
+);
+const loadGoalsScreen = cachedImport(() =>
+  import('@/components/GoalsScreen').then(({ GoalsScreen }) => ({ default: memo(GoalsScreen) })),
+);
+
+const LazySettingsScreen = lazy(loadSettingsScreen);
 const MemoizedHomeScreen = memo(HomeScreen);
-const MemoizedStatisticsScreen = memo(StatisticsScreen);
-const MemoizedWalletScreen = memo(WalletScreen);
-const MemoizedGoalsScreen = memo(GoalsScreen);
+const MemoizedStatisticsScreen = lazy(loadStatisticsScreen);
+const MemoizedWalletScreen = lazy(loadWalletScreen);
+const MemoizedGoalsScreen = lazy(loadGoalsScreen);
+
+/** Start downloading every secondary screen without waiting for the user to open it. */
+export async function preloadAppScreens(): Promise<void> {
+  await Promise.allSettled([
+    loadSettingsScreen(),
+    loadStatisticsScreen(),
+    loadWalletScreen(),
+    loadGoalsScreen(),
+  ]);
+}
+
+function ScreenLoading({ overlay = false }: { overlay?: boolean }) {
+  const className = overlay
+    ? 'fixed inset-0 z-[100] flex items-center justify-center bg-transparent px-6'
+    : 'flex min-h-[40vh] items-center justify-center px-6';
+
+  return (
+    <div className={className} aria-hidden="true">
+      <div className="w-full max-w-sm space-y-5">
+        <div className="neo-skeleton h-5 w-36 rounded-full" />
+        <div className="neo-skeleton h-36 w-full rounded-3xl" />
+        <div className="grid grid-cols-2 gap-3">
+          <div className="neo-skeleton h-24 rounded-2xl" />
+          <div className="neo-skeleton h-24 rounded-2xl" />
+        </div>
+        <div className="space-y-3">
+          <div className="neo-skeleton h-12 rounded-2xl" />
+          <div className="neo-skeleton h-12 rounded-2xl" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const { themeMode, setThemeMode, backgroundStyle, setBackgroundStyle } = useTheme();
-
-  useEffect(() => {
-    void requestPersistentStorage();
-  }, []);
 
   const [activeTab, setActiveTab] = useState<AppTab>('home');
   const [visitedTabs, setVisitedTabs] = useState<Set<AppTab>>(() => new Set(['home']));
   const [activeSheet, setActiveSheet] = useState<ActiveSheet>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const settingsOpenerRef = useRef<HTMLElement | null>(null);
   const [selectedTransactionId, setSelectedTransactionId] = useState<Transaction['id'] | null>(null);
   const [balanceEditorAccountId, setBalanceEditorAccountId] = useState<string>(MAIN_ACCOUNT_ID);
 
@@ -283,20 +330,8 @@ function App() {
     setActiveTab(tab);
   }, []);
 
-  const handleOpenSettings = useCallback(() => {
-    const activeElement = document.activeElement;
-    settingsOpenerRef.current = activeElement instanceof HTMLElement ? activeElement : null;
-    if (activeElement instanceof HTMLElement && activeElement !== document.body) activeElement.blur();
-    setIsSettingsOpen(true);
-  }, []);
-
-  const handleCloseSettings = useCallback(() => {
-    setIsSettingsOpen(false);
-    window.requestAnimationFrame(() => {
-      const opener = settingsOpenerRef.current;
-      if (opener?.isConnected) opener.focus({ preventScroll: true });
-    });
-  }, []);
+  const handleOpenSettings = useCallback(() => setIsSettingsOpen(true), []);
+  const handleCloseSettings = useCallback(() => setIsSettingsOpen(false), []);
 
   return (
     <div className="relative min-h-screen bg-transparent text-neutral-900 transition-colors duration-300 dark:text-white">
@@ -335,12 +370,14 @@ function App() {
               aria-label="Статистика"
               className="absolute inset-0 overflow-y-auto overscroll-contain no-scrollbar pb-32"
             >
-              <MemoizedStatisticsScreen
-                transactions={rubTransactions}
-                categories={categories}
-                otherCurrencyCodes={otherCurrencyCodes}
-                onSelectTransaction={handleSelectTransaction}
-              />
+              <Suspense fallback={<ScreenLoading />}>
+                <MemoizedStatisticsScreen
+                  transactions={rubTransactions}
+                  categories={categories}
+                  otherCurrencyCodes={otherCurrencyCodes}
+                  onSelectTransaction={handleSelectTransaction}
+                />
+              </Suspense>
             </section>
           )}
 
@@ -351,19 +388,21 @@ function App() {
               aria-label="Кошелёк"
               className="absolute inset-0 overflow-y-auto overscroll-contain no-scrollbar pb-32"
             >
-              <MemoizedWalletScreen
-                accounts={accounts}
-                transactions={transactions}
-                accountBalances={accountBalances}
-                balancesByCurrency={balancesByCurrency}
-                categories={categories}
-                onAddAccount={handleAddAccount}
-                onUpdateAccount={handleUpdateAccount}
-                onSetAccountArchived={setAccountArchived}
-                onRequestTransfer={openTransferSheet}
-                onSelectTransaction={handleSelectTransaction}
-                canWriteAccounts={canWriteAccounts}
-              />
+              <Suspense fallback={<ScreenLoading />}>
+                <MemoizedWalletScreen
+                  accounts={accounts}
+                  transactions={transactions}
+                  accountBalances={accountBalances}
+                  balancesByCurrency={balancesByCurrency}
+                  categories={categories}
+                  onAddAccount={handleAddAccount}
+                  onUpdateAccount={handleUpdateAccount}
+                  onSetAccountArchived={setAccountArchived}
+                  onRequestTransfer={openTransferSheet}
+                  onSelectTransaction={handleSelectTransaction}
+                  canWriteAccounts={canWriteAccounts}
+                />
+              </Suspense>
             </section>
           )}
 
@@ -374,20 +413,22 @@ function App() {
               aria-label="Цели"
               className="absolute inset-0 overflow-y-auto overscroll-contain no-scrollbar pb-32"
             >
-              <MemoizedGoalsScreen
-                goals={goals}
-                totalSaved={goalsTotalSaved}
-                totalTarget={goalsTotalTarget}
-                overallProgress={goalsOverallProgress}
-                activeCount={activeGoalsCount}
-                completedCount={completedGoalsCount}
-                canWrite={canWriteGoals}
-                onAddGoal={addGoal}
-                onUpdateGoal={updateGoal}
-                onDeleteGoal={deleteGoal}
-                onAddProgress={addGoalProgress}
-                onReduceProgress={reduceGoalProgress}
-              />
+              <Suspense fallback={<ScreenLoading />}>
+                <MemoizedGoalsScreen
+                  goals={goals}
+                  totalSaved={goalsTotalSaved}
+                  totalTarget={goalsTotalTarget}
+                  overallProgress={goalsOverallProgress}
+                  activeCount={activeGoalsCount}
+                  completedCount={completedGoalsCount}
+                  canWrite={canWriteGoals}
+                  onAddGoal={addGoal}
+                  onUpdateGoal={updateGoal}
+                  onDeleteGoal={deleteGoal}
+                  onAddProgress={addGoalProgress}
+                  onReduceProgress={reduceGoalProgress}
+                />
+              </Suspense>
             </section>
           )}
         </div>
@@ -400,27 +441,29 @@ function App() {
       </div>
 
       {isSettingsOpen && (
-        <SettingsScreen
-          onClose={handleCloseSettings}
-          userName={userName}
-          initialBalance={mainAccountInitialBalance}
-          monthlyBudget={monthlyBudget}
-          updateName={updateName}
-          updateInitialBalance={handleSetMainOpeningBalance}
-          themeMode={themeMode}
-          setThemeMode={setThemeMode}
-          backgroundStyle={backgroundStyle}
-          setBackgroundStyle={setBackgroundStyle}
-          accounts={accounts}
-          transactions={transactions}
-          categories={categories}
-          goals={goals}
-          addCategory={addCategory}
-          updateCategory={updateCategory}
-          deleteCategory={handleDeleteCategory}
-          onDownloadRecovery={handleDownloadRecovery}
-          storageWriteFailed={storageIssues.some((issue) => issue.kind === 'write-failed')}
-        />
+        <Suspense fallback={<ScreenLoading overlay />}>
+          <LazySettingsScreen
+            onClose={handleCloseSettings}
+            userName={userName}
+            initialBalance={mainAccountInitialBalance}
+            monthlyBudget={monthlyBudget}
+            updateName={updateName}
+            updateInitialBalance={handleSetMainOpeningBalance}
+            themeMode={themeMode}
+            setThemeMode={setThemeMode}
+            backgroundStyle={backgroundStyle}
+            setBackgroundStyle={setBackgroundStyle}
+            accounts={accounts}
+            transactions={transactions}
+            categories={categories}
+            goals={goals}
+            addCategory={addCategory}
+            updateCategory={updateCategory}
+            deleteCategory={handleDeleteCategory}
+            onDownloadRecovery={handleDownloadRecovery}
+            storageWriteFailed={storageIssues.some((issue) => issue.kind === 'write-failed')}
+          />
+        </Suspense>
       )}
 
       <AddTransactionSheet
@@ -480,6 +523,7 @@ function App() {
       />
 
       <StorageRecoveryNotice issues={storageIssues} onDownloadRecovery={handleDownloadRecovery} />
+      <PwaUpdatePrompt />
     </div>
   );
 }

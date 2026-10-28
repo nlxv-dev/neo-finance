@@ -2,7 +2,7 @@ import { memo, useMemo, useState } from 'react';
 import { ArrowDownRight, ArrowLeftRight, ArrowUpRight } from 'lucide-react';
 import { IconRenderer } from '@/components/IconRenderer';
 import { formatCurrency, type Transaction } from '@/data/mockData';
-import type { CustomCategory } from '@/hooks/useCategories';
+import type { CustomCategory } from '@/data/categories';
 import type { Account } from '@/data/accounts';
 import { MAIN_ACCOUNT_ID } from '@/data/accounts';
 import { getCurrencySymbol } from '@/utils/currency';
@@ -166,7 +166,7 @@ const TransactionRow = memo(function TransactionRow({
             <IconRenderer
               name={categoryIcon}
               className={`h-5 w-5 ${
-                transaction.isIncome ? 'text-green-700 dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'
+                transaction.isIncome ? 'text-mint' : 'text-neutral-500 dark:text-neutral-400'
               }`}
             />
           )}
@@ -188,7 +188,7 @@ const TransactionRow = memo(function TransactionRow({
             className={`flex items-center gap-0.5 text-sm font-semibold tabular-nums ${
               transaction.isTransfer
                 ? 'text-neutral-600 dark:text-neutral-300'
-                : transaction.isIncome ? 'text-green-700 dark:text-mint' : 'text-neutral-900 dark:text-white'
+                : transaction.isIncome ? 'text-mint' : 'text-neutral-900 dark:text-white'
             }`}
           >
             {transaction.isTransfer ? (

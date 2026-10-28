@@ -55,7 +55,6 @@ export function GoalProgressSheet({ open, goal, canWrite, onClose, onSave }: Goa
     <BottomSheet
       open={open}
       onClose={onClose}
-      onEscape={() => (keyboardOpen ? setKeyboardOpen(false) : onClose())}
       onBackdropClick={() => (keyboardOpen ? setKeyboardOpen(false) : onClose())}
       onPanelClick={(event) => {
         if (!keyboardOpen) return;
@@ -111,11 +110,8 @@ export function GoalProgressSheet({ open, goal, canWrite, onClose, onSave }: Goa
             <div className="flex items-baseline justify-center gap-1">
               <AmountTrigger
                 value={amountDigits}
-                onChange={(value) => setAmountDigits(value.replace(/\D/g, '').slice(0, 12))}
                 keyboardOpen={keyboardOpen}
                 onToggleKeyboard={() => setKeyboardOpen((value) => !value)}
-                onOpenKeyboard={() => setKeyboardOpen(true)}
-                onCloseKeyboard={() => setKeyboardOpen(false)}
                 label="Сумма обновления прогресса"
                 keyboardId="goal-progress-keyboard"
                 showCurrency={false}

@@ -10,25 +10,20 @@ import { MonthPicker } from '@/components/MonthPicker';
 import { DayPicker } from '@/components/DayPicker';
 import { formatCurrency, type Transaction } from '@/data/mockData';
 import { formatISODateShort, resolveTransactionDateISO, toLocalISODate } from '@/data/transactionDates';
-import type { CustomCategory } from '@/hooks/useCategories';
-
-type ViewMode = 'all' | 'income' | 'expense';
-type PeriodMode = 'day' | 'month';
-
-type DailyPoint = {
-  day: number;
-  income: number;
-  expenses: number;
-};
-
-type CategoryStat = {
-  key: string;
-  name: string;
-  iconName: string;
-  amount: number;
-  percent: number;
-  transactions: Transaction[];
-};
+import type { CustomCategory } from '@/data/categories';
+import {
+  buildCategoryPeriodChanges,
+  buildCategoryStatistics,
+  buildDailyStatistics,
+  calculatePeriodStatistics,
+  getDaysInMonth,
+  getMonthKey,
+  getStatisticsComparisonPeriods,
+  selectStatisticsTransactions,
+  selectStatisticsTransactionsInRange,
+  type StatisticsPeriodMode,
+  type StatisticsViewMode,
+} from '@/utils/financialAnalytics';
 
 const MONTHS_RU = [
   'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
@@ -49,14 +44,6 @@ const LONG_DATE_WITH_YEAR_FORMATTER = new Intl.DateTimeFormat('ru-RU', {
   month: 'long',
   year: 'numeric',
 });
-
-function getMonthKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function getDaysInMonth(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-}
 
 function makeLinePath(values: number[], maxValue: number): string {
   if (values.length < 2 || maxValue <= 0) return '';
@@ -101,8 +88,48 @@ function formatSignedCurrency(amount: number): string {
   return '0';
 }
 
-function getCategoryKey(transaction: Transaction): string {
-  return transaction.categoryId ?? `legacy:${transaction.category.trim().toLocaleLowerCase('ru-RU')}`;
+function parseLocalDateKey(dateKey: string): Date {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatComparisonRangeLabel(startDateISO: string, endDateISO: string): string {
+  const start = parseLocalDateKey(startDateISO);
+  const end = parseLocalDateKey(endDateISO);
+  if (startDateISO === endDateISO) {
+    return `${start.getDate()} ${SHORT_MONTHS_RU[start.getMonth()]} ${start.getFullYear()}`;
+  }
+  if (start.getFullYear() === end.getFullYear() && start.getMonth() === end.getMonth()) {
+    return `${start.getDate()}–${end.getDate()} ${SHORT_MONTHS_RU[end.getMonth()]} ${end.getFullYear()}`;
+  }
+  return `${start.getDate()} ${SHORT_MONTHS_RU[start.getMonth()]} ${start.getFullYear()} – ${end.getDate()} ${SHORT_MONTHS_RU[end.getMonth()]} ${end.getFullYear()}`;
+}
+
+function getComparisonHeadline(
+  mode: StatisticsViewMode,
+  currentValue: number,
+  previousValue: number,
+): string {
+  const difference = currentValue - previousValue;
+  if (mode === 'all') {
+    if (difference === 0) return 'Чистый итог без изменений';
+    return `Чистый итог ${difference > 0 ? 'выше' : 'ниже'} на ${formatCurrency(Math.abs(difference))} ₽`;
+  }
+
+  const metricLabel = mode === 'income' ? 'Доходы' : 'Расходы';
+  const metricGenitive = mode === 'income' ? 'доходов' : 'расходов';
+  if (currentValue === 0 && previousValue === 0) {
+    return `${metricLabel}: ${metricGenitive} не было ни в одном периоде`;
+  }
+  if (previousValue === 0) return `В предыдущем периоде ${metricGenitive} не было`;
+  if (difference === 0) return `${metricLabel} без изменений`;
+
+  const percent = Math.max(1, Math.round((Math.abs(difference) / previousValue) * 100));
+  return `${metricLabel} ${difference > 0 ? 'выросли' : 'снизились'} на ${percent}%`;
+}
+
+function formatComparisonMetric(mode: StatisticsViewMode, value: number): string {
+  return mode === 'all' ? formatSignedCurrency(value) : formatCurrency(value);
 }
 
 export function StatisticsScreen({
@@ -120,12 +147,12 @@ export function StatisticsScreen({
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [periodMode, setPeriodMode] = useState<PeriodMode>('month');
+  const [periodMode, setPeriodMode] = useState<StatisticsPeriodMode>('month');
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   });
-  const [mode, setMode] = useState<ViewMode>('all');
+  const [mode, setMode] = useState<StatisticsViewMode>('all');
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
   const [showAllCategories, setShowAllCategories] = useState(false);
@@ -135,54 +162,59 @@ export function StatisticsScreen({
   const selectedMonthKey = getMonthKey(selectedMonth);
   const isCurrentMonth = currentMonthKey === selectedMonthKey;
   const currentDateKey = toLocalISODate(now);
+  const referenceDate = useMemo(() => {
+    const [year, month, day] = currentDateKey.split('-').map(Number);
+    return new Date(year, month - 1, day, 12);
+  }, [currentDateKey]);
   const selectedDateKey = toLocalISODate(selectedDate);
   const isCurrentDay = currentDateKey === selectedDateKey;
   const monthDays = getDaysInMonth(selectedMonth);
   const visibleDays = isCurrentMonth ? now.getDate() : monthDays;
   const monthLabel = `${MONTHS_RU[selectedMonth.getMonth()]} ${selectedMonth.getFullYear()}`;
 
-  const categoryById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
+  const periodTransactions = useMemo(
+    () => selectStatisticsTransactions(transactions, selectedMonthKey, periodMode, selectedDateKey, referenceDate),
+    [transactions, selectedMonthKey, periodMode, selectedDateKey, referenceDate]
+  );
 
-  const periodTransactions = useMemo(() => {
-    const prefix = selectedMonthKey;
-    return transactions.filter((transaction) => {
-      if (transaction.isTransfer) return false;
-      const isoDate = resolveTransactionDateISO(transaction);
-      if (periodMode === 'day') return isoDate === selectedDateKey;
-      return Boolean(isoDate && isoDate.startsWith(prefix));
-    });
-  }, [transactions, selectedMonthKey, periodMode, selectedDateKey]);
+  const comparisonPeriods = useMemo(
+    () => getStatisticsComparisonPeriods(periodMode, selectedMonthKey, selectedDateKey, referenceDate),
+    [periodMode, selectedMonthKey, selectedDateKey, referenceDate],
+  );
+  const previousPeriodTransactions = useMemo(
+    () => selectStatisticsTransactionsInRange(transactions, comparisonPeriods.previous, referenceDate),
+    [transactions, comparisonPeriods, referenceDate],
+  );
+  const previousPeriodTotals = useMemo(
+    () => calculatePeriodStatistics(previousPeriodTransactions),
+    [previousPeriodTransactions],
+  );
 
-  const periodIncome = useMemo(
-    () => periodTransactions.reduce((sum, transaction) => sum + (transaction.isIncome ? transaction.amount : 0), 0),
+  const categoryPeriodChanges = useMemo(
+    () => buildCategoryPeriodChanges(periodTransactions, previousPeriodTransactions, categories, mode),
+    [periodTransactions, previousPeriodTransactions, categories, mode],
+  );
+  const hasCategoryPeriodData = useMemo(
+    () => [periodTransactions, previousPeriodTransactions].some((list) =>
+      list.some((transaction) =>
+        !transaction.isTransfer &&
+        Number.isFinite(transaction.amount) &&
+        transaction.isIncome === (mode === 'income'),
+      ),
+    ),
+    [periodTransactions, previousPeriodTransactions, mode],
+  );
+
+  const periodTotals = useMemo(
+    () => calculatePeriodStatistics(periodTransactions),
     [periodTransactions]
   );
-  const periodExpenses = useMemo(
-    () => periodTransactions.reduce((sum, transaction) => sum + (!transaction.isIncome ? transaction.amount : 0), 0),
-    [periodTransactions]
+  const { income: periodIncome, expenses: periodExpenses, net: netPeriodTotal } = periodTotals;
+
+  const chartData = useMemo(
+    () => periodMode === 'day' ? [] : buildDailyStatistics(periodTransactions, visibleDays),
+    [periodTransactions, visibleDays, periodMode]
   );
-  const netPeriodTotal = periodIncome - periodExpenses;
-
-  const chartData = useMemo<DailyPoint[]>(() => {
-    if (periodMode === 'day') return [];
-    const days = Array.from({ length: visibleDays }, (_, index) => ({
-      day: index + 1,
-      income: 0,
-      expenses: 0,
-    }));
-
-    periodTransactions.forEach((transaction) => {
-      const isoDate = resolveTransactionDateISO(transaction);
-      if (!isoDate) return;
-      const day = Number(isoDate.slice(8, 10));
-      const point = days[day - 1];
-      if (!point) return;
-      if (transaction.isIncome) point.income += transaction.amount;
-      else point.expenses += transaction.amount;
-    });
-
-    return days;
-  }, [periodTransactions, visibleDays, periodMode]);
 
   const chartMaximum = useMemo(() => {
     const values = chartData.flatMap((point) => {
@@ -202,46 +234,10 @@ export function StatisticsScreen({
     [chartData, chartMaximum]
   );
 
-  const categoryStats = useMemo<CategoryStat[]>(() => {
-    const relevantTransactions = periodTransactions.filter((transaction) => {
-      if (mode === 'income') return transaction.isIncome;
-      // The combined view uses spending categories; the income total remains visible above.
-      return !transaction.isIncome;
-    });
-    const groups = new Map<string, Omit<CategoryStat, 'percent'>>();
-
-    relevantTransactions.forEach((transaction) => {
-      const key = getCategoryKey(transaction);
-      const linkedCategory = transaction.categoryId ? categoryById.get(transaction.categoryId) : undefined;
-      const existing = groups.get(key);
-      if (existing) {
-        existing.amount += transaction.amount;
-        existing.transactions.push(transaction);
-      } else {
-        groups.set(key, {
-          key,
-          name: linkedCategory?.name ?? (transaction.category || 'Без категории'),
-          iconName: linkedCategory?.iconName ?? transaction.categoryIconName ?? 'HelpCircle',
-          amount: transaction.amount,
-          transactions: [transaction],
-        });
-      }
-    });
-
-    const denominator = mode === 'income' ? periodIncome : periodExpenses;
-    return [...groups.values()]
-      .map((group) => ({
-        ...group,
-        percent: denominator > 0 ? Math.round((group.amount / denominator) * 100) : 0,
-        transactions: group.transactions.slice().sort((a, b) => {
-          const aDate = resolveTransactionDateISO(a) ?? '';
-          const bDate = resolveTransactionDateISO(b) ?? '';
-          return bDate.localeCompare(aDate) || b.id - a.id;
-        }),
-      }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [periodTransactions, categoryById, mode, periodIncome, periodExpenses]);
-
+  const categoryStats = useMemo(
+    () => buildCategoryStatistics(periodTransactions, categories, mode, periodIncome, periodExpenses),
+    [periodTransactions, categories, mode, periodIncome, periodExpenses]
+  );
   const displayedCategories = showAllCategories ? categoryStats : categoryStats.slice(0, 5);
   const selectedDateLabel = (() => {
     if (isCurrentDay) return 'сегодня';
@@ -260,6 +256,18 @@ export function StatisticsScreen({
       ? `Доходы ${periodLabel}`
       : `Расходы ${periodLabel}`;
   const heroAmount = mode === 'all' ? netPeriodTotal : mode === 'income' ? periodIncome : periodExpenses;
+  const previousHeroAmount = mode === 'all'
+    ? previousPeriodTotals.net
+    : mode === 'income' ? previousPeriodTotals.income : previousPeriodTotals.expenses;
+  const comparisonHeadline = getComparisonHeadline(mode, heroAmount, previousHeroAmount);
+  const currentComparisonLabel = formatComparisonRangeLabel(
+    comparisonPeriods.current.startDateISO,
+    comparisonPeriods.current.endDateISO,
+  );
+  const previousComparisonLabel = formatComparisonRangeLabel(
+    comparisonPeriods.previous.startDateISO,
+    comparisonPeriods.previous.endDateISO,
+  );
   const chartHasData = mode === 'income' ? periodIncome > 0 : mode === 'expense' ? periodExpenses > 0 : periodIncome > 0 || periodExpenses > 0;
   const categoryTitle = mode === 'income' ? 'Доходы по категориям' : 'Расходы по категориям';
 
@@ -295,7 +303,7 @@ export function StatisticsScreen({
     });
   };
 
-  const selectPeriod = (nextMode: PeriodMode) => {
+  const selectPeriod = (nextMode: StatisticsPeriodMode) => {
     if (nextMode === periodMode) return;
     setPeriodMode(nextMode);
     setSelectedDay(null);
@@ -319,7 +327,7 @@ export function StatisticsScreen({
     }
   };
 
-  const selectMode = (nextMode: ViewMode) => {
+  const selectMode = (nextMode: StatisticsViewMode) => {
     setMode(nextMode);
     setSelectedDay(null);
     setSelectedCategoryKey(null);
@@ -333,6 +341,7 @@ export function StatisticsScreen({
     const progress = Math.max(0, Math.min(1, (x - 10) / 300));
     setSelectedDay(Math.round(progress * (chartData.length - 1)) + 1);
   };
+
 
   const signedHero = mode === 'all' ? formatSignedCurrency(heroAmount) : formatCurrency(heroAmount);
 
@@ -436,39 +445,40 @@ export function StatisticsScreen({
           {selectedPoint && chartHasData && (
             <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full bg-neutral-100 px-3 py-1.5 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
               <span className="font-semibold">{selectedPoint.day} {SHORT_MONTHS_RU[selectedMonth.getMonth()]}</span>
-              {mode !== 'expense' && <span className="text-emerald-600 dark:text-mint">↑ {formatCurrency(selectedPoint.income)} ₽</span>}
-              {mode !== 'income' && <span>↘ {formatCurrency(selectedPoint.expenses)} ₽</span>}
+              {mode !== 'expense' && <span className="text-mint">↑ {formatCurrency(selectedPoint.income)} ₽</span>}
+              {mode !== 'income' && <span className="text-indigo-500 dark:text-indigo-300">↘ {formatCurrency(selectedPoint.expenses)} ₽</span>}
             </div>
           )}
           <svg
             viewBox="0 0 320 130"
             role="img"
             aria-label={`График ${mode === 'all' ? 'доходов и расходов' : mode === 'income' ? 'доходов' : 'расходов'} за ${monthLabel}`}
-            className="block h-[142px] w-full touch-pan-y select-none"
+            className="block h-[142px] w-full touch-pan-y select-none rounded-lg"
             onPointerMove={handleChartPointerMove}
+            onPointerDown={handleChartPointerMove}
             onPointerLeave={() => setSelectedDay(null)}
           >
             <defs>
-              <linearGradient id="statistics-line-gradient" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stopColor="#73DDAA" />
-                <stop offset="100%" stopColor="#7776EF" />
-              </linearGradient>
-              <linearGradient id="statistics-area-gradient" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id="statistics-income-area-gradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#75DDB0" stopOpacity="0.16" />
                 <stop offset="100%" stopColor="#75DDB0" stopOpacity="0" />
+              </linearGradient>
+              <linearGradient id="statistics-expense-area-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#7776EF" stopOpacity="0.16" />
+                <stop offset="100%" stopColor="#7776EF" stopOpacity="0" />
               </linearGradient>
             </defs>
             {[10, 35, 60, 85, 112].map((y) => (
               <line key={y} x1="10" y1={y} x2="310" y2={y} stroke="currentColor" strokeOpacity="0.08" strokeDasharray="3 5" />
             ))}
             {mode !== 'income' && periodExpenses > 0 && (
-              <path d={`${expensesPath} L 310 112 L 10 112 Z`} fill="url(#statistics-area-gradient)" />
+              <path d={`${expensesPath} L 310 112 L 10 112 Z`} fill="url(#statistics-expense-area-gradient)" />
             )}
             {mode === 'income' && periodIncome > 0 && (
-              <path d={`${incomePath} L 310 112 L 10 112 Z`} fill="url(#statistics-area-gradient)" />
+              <path d={`${incomePath} L 310 112 L 10 112 Z`} fill="url(#statistics-income-area-gradient)" />
             )}
             {mode !== 'income' && periodExpenses > 0 && (
-              <path d={expensesPath} stroke="url(#statistics-line-gradient)" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+              <path d={expensesPath} stroke="#7776EF" strokeWidth="2.5" fill="none" strokeLinecap="round" />
             )}
             {mode !== 'expense' && periodIncome > 0 && (
               <path d={incomePath} stroke="#67CDA1" strokeWidth="2.5" fill="none" strokeLinecap="round" />
@@ -532,6 +542,77 @@ export function StatisticsScreen({
           </p>
         </div>
       </section>
+
+      <section className="mt-3 rounded-2xl neu-card p-4" aria-label="Сравнение с предыдущим периодом">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+          К предыдущему периоду
+        </p>
+        <p className="mt-2 text-sm font-semibold tracking-tight text-neutral-900 dark:text-white">
+          {comparisonHeadline}
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <p className="text-[10px] text-neutral-400 dark:text-neutral-500">{currentComparisonLabel}</p>
+            <p className="mt-1 truncate text-sm font-medium tabular-nums text-neutral-900 dark:text-white">
+              {formatComparisonMetric(mode, heroAmount)} ₽
+            </p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] text-neutral-400 dark:text-neutral-500">{previousComparisonLabel}</p>
+            <p className="mt-1 truncate text-sm font-medium tabular-nums text-neutral-600 dark:text-neutral-300">
+              {formatComparisonMetric(mode, previousHeroAmount)} ₽
+            </p>
+          </div>
+        </div>
+      </section>
+
+
+      {periodMode === 'month' && (
+        <section className="mt-3 rounded-2xl neu-card p-4" aria-label="Изменения по категориям">
+          <div className="mb-3">
+            <h2 className="text-sm font-semibold tracking-tight text-neutral-900 dark:text-white">
+              Что изменилось по категориям
+            </h2>
+            <p className="mt-1 text-[10px] text-neutral-400 dark:text-neutral-500">
+              {previousComparisonLabel} → {currentComparisonLabel}
+            </p>
+          </div>
+
+          {categoryPeriodChanges.length === 0 ? (
+            <p className="py-2 text-xs text-neutral-400 dark:text-neutral-500">
+              {hasCategoryPeriodData
+                ? 'Суммы по категориям не изменились между периодами.'
+                : 'Нет операций для сравнения по категориям в этих периодах.'}
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {categoryPeriodChanges.slice(0, 3).map((change) => (
+                <div key={change.key} className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 dark:bg-neutral-800/70">
+                    <IconRenderer name={change.iconName} className="h-4 w-4 text-neutral-500 dark:text-neutral-300" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-neutral-800 dark:text-neutral-100">
+                      {change.name}
+                    </p>
+                    <p className="mt-1 text-[10px] tabular-nums text-neutral-400 dark:text-neutral-500">
+                      {formatCurrency(change.previousAmount)} ₽ → {formatCurrency(change.currentAmount)} ₽
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs font-semibold tabular-nums text-neutral-900 dark:text-white">
+                      {change.difference > 0 ? '+' : '−'}{formatCurrency(Math.abs(change.difference))} ₽
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-neutral-400 dark:text-neutral-500">
+                      {mode === 'income' ? 'доходы' : 'расходы'}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="mt-8">
         <div className="mb-4 flex items-center justify-between gap-3">

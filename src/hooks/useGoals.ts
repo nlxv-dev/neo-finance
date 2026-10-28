@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { Goal, GoalInput } from '@/data/goals';
+import { STORAGE_KEYS } from '@/storage/storageKeys';
+import { getDatabaseBootstrapSnapshot, hasDatabaseBootstrap, persistGoals, queryDatabaseGoals } from '@/storage/databaseStorage';
 import { getGoalRemaining, isGoalCompleted, normalizeStoredGoals, type GoalColor } from '@/data/goals';
+import { areRecordArraysEqual } from '@/storage/recordEquality';
 import {
   canPersistReadStatus,
   readStoredJson,
@@ -9,10 +13,12 @@ import {
   type StorageReadResult,
 } from '@/storage/safeLocalStorage';
 
-export const GOALS_STORAGE_KEY = 'fintrack-goals';
+export const GOALS_STORAGE_KEY = STORAGE_KEYS.goals;
 
 function loadGoals(): StorageReadResult<Goal[]> {
   // A new install starts with no demo goals or fabricated savings amounts.
+  const snapshot = getDatabaseBootstrapSnapshot();
+  if (snapshot) return { value: snapshot.goals, status: 'valid' };
   return readStoredJson<Goal[]>(GOALS_STORAGE_KEY, [], normalizeStoredGoals);
 }
 
@@ -26,15 +32,54 @@ function createGoalId(): string {
 export function useGoals() {
   const [record, setRecord] = useState<StorageReadResult<Goal[]>>(loadGoals);
   const recordRef = useRef(record);
+  const pendingLocalWrites = useRef(0);
   const [writeIssue, setWriteIssue] = useState<StorageIssue | null>(null);
+  const liveGoals = useLiveQuery(
+    () => hasDatabaseBootstrap() ? queryDatabaseGoals() : null,
+    [],
+    null,
+  );
   const canWrite = canPersistReadStatus(record.status) && !writeIssue;
   const goals = record.value;
 
+  const applyLiveGoals = useCallback((rows: Goal[]) => {
+    if (pendingLocalWrites.current > 0) return;
+    const current = recordRef.current;
+    if (areRecordArraysEqual(current.value, rows) && current.status === 'valid' && !current.issue) return;
+    const next: StorageReadResult<Goal[]> = { value: rows, status: 'valid' };
+    recordRef.current = next;
+    setRecord(next);
+  }, []);
+
+  const refreshLatestGoals = useCallback(async () => {
+    try {
+      applyLiveGoals(await queryDatabaseGoals());
+    } catch {
+      setWriteIssue({ key: GOALS_STORAGE_KEY, kind: 'write-failed' });
+    }
+  }, [applyLiveGoals]);
+
+  const persistLocalGoals = useCallback((previousRows: Goal[], rows: Goal[]) => {
+    if (!hasDatabaseBootstrap()) return;
+    pendingLocalWrites.current += 1;
+    void persistGoals(rows, previousRows).then(() => setWriteIssue(null)).catch(() => {
+      setWriteIssue({ key: GOALS_STORAGE_KEY, kind: 'write-failed' });
+    }).finally(() => {
+      pendingLocalWrites.current = Math.max(0, pendingLocalWrites.current - 1);
+      if (pendingLocalWrites.current === 0) void refreshLatestGoals();
+    });
+  }, [refreshLatestGoals]);
+
   useEffect(() => {
-    // Keep a synchronous ref to the latest committed domain record. Goal actions
-    // read and update this ref atomically, so rapid actions cannot overwrite a
-    // progress change with values captured by an older render closure.
+    if (!hasDatabaseBootstrap() || !liveGoals) return;
+    applyLiveGoals(liveGoals);
+  }, [liveGoals, applyLiveGoals]);
+
+  useEffect(() => {
+    // Keep a synchronous ref to the latest committed domain record. In the
+    // legacy-only test/recovery path, persistence remains LocalStorage-based.
     recordRef.current = record;
+    if (hasDatabaseBootstrap()) return;
     if (!canPersistReadStatus(record.status)) return;
     const issue = writeStoredJson(GOALS_STORAGE_KEY, record.value);
     setWriteIssue((previous) => {
@@ -45,9 +90,11 @@ export function useGoals() {
   }, [record]);
 
   const commit = useCallback((next: StorageReadResult<Goal[]>): void => {
+    const current = recordRef.current;
     recordRef.current = next;
     setRecord(next);
-  }, []);
+    persistLocalGoals(current.value, next.value);
+  }, [persistLocalGoals]);
 
   const addGoal = useCallback((input: GoalInput): boolean => {
     const current = recordRef.current;

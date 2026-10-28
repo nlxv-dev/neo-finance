@@ -18,11 +18,11 @@ export function PlaceholderScreen({ icon: Icon, section, description }: Placehol
       <div className="relative">
         <div className="absolute inset-0 rounded-[28px] bg-gradient-to-br from-mint/30 to-indigoblue/20 blur-2xl" />
         <div className="relative flex h-20 w-20 items-center justify-center rounded-[28px] neu-card">
-          <Icon className="h-9 w-9 text-emerald-600 dark:text-mint" strokeWidth={1.6} aria-hidden="true" />
+          <Icon className="h-9 w-9 text-mint" strokeWidth={1.6} aria-hidden="true" />
         </div>
       </div>
 
-      <span className="mt-6 inline-flex items-center gap-1.5 rounded-full bg-mint/10 px-3 py-1 text-[11px] font-medium text-emerald-700 dark:text-mint">
+      <span className="mt-6 inline-flex items-center gap-1.5 rounded-full bg-mint/10 px-3 py-1 text-[11px] font-medium text-mint">
         <Sparkles className="h-3 w-3" aria-hidden="true" />
         {section}
       </span>

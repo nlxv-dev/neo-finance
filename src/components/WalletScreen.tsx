@@ -13,7 +13,7 @@ import {
 import type { Account, AccountType } from '@/data/accounts';
 import { ACCOUNT_TYPE_LABELS, MAIN_ACCOUNT_ID } from '@/data/accounts';
 import { formatCurrency, type Transaction } from '@/data/mockData';
-import type { CustomCategory } from '@/hooks/useCategories';
+import type { CustomCategory } from '@/data/categories';
 import type { AccountInput } from '@/hooks/useAccounts';
 import { IconRenderer } from '@/components/IconRenderer';
 import { AnimatedCounter } from '@/components/AnimatedCounter';
@@ -285,7 +285,7 @@ export function WalletScreen({
           </div>
           <div className="mt-2.5 flex items-center justify-between rounded-xl neu-inset px-3.5 py-3">
             <span className="text-xs text-neutral-500 dark:text-neutral-400">Чистый поток</span>
-            <span className={`text-sm font-semibold tabular-nums ${selectedSummary.net > 0 ? 'text-green-700 dark:text-mint' : selectedSummary.net < 0 ? 'text-red-500 dark:text-red-400' : 'text-neutral-700 dark:text-neutral-200'}`}>
+            <span className={`text-sm font-semibold tabular-nums ${selectedSummary.net > 0 ? 'text-mint' : selectedSummary.net < 0 ? 'text-red-500 dark:text-red-400' : 'text-neutral-700 dark:text-neutral-200'}`}>
               {selectedSummary.net > 0 ? '+' : selectedSummary.net < 0 ? '−' : ''}{formatCurrency(Math.abs(selectedSummary.net))} {currencySymbol(selectedAccount.currency)}
             </span>
           </div>
@@ -341,7 +341,7 @@ export function WalletScreen({
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className={`text-sm font-semibold tabular-nums ${isTransfer ? 'text-neutral-600 dark:text-neutral-300' : isIncome ? 'text-green-700 dark:text-mint' : 'text-neutral-900 dark:text-white'}`}>
+                    <p className={`text-sm font-semibold tabular-nums ${isTransfer ? 'text-neutral-600 dark:text-neutral-300' : isIncome ? 'text-mint' : 'text-neutral-900 dark:text-white'}`}>
                       {isTransfer ? '' : isIncome ? '+' : '−'}{formatCurrency(transaction.amount)} {symbol}
                     </p>
                   </div>
@@ -395,7 +395,7 @@ function AccountCard({
           type="button"
           onClick={onSelect}
           aria-pressed={selected}
-          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint/50"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left "
         >
           <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${accountColorClass(account.color)}`}>
             <IconRenderer name={account.iconName} className="h-5 w-5" />
@@ -452,7 +452,7 @@ function MetricCard({
 }) {
   return (
     <div className="rounded-xl neu-inset p-3">
-      <div className={`flex items-center gap-1.5 ${positive ? 'text-green-700 dark:text-mint' : 'text-neutral-500 dark:text-neutral-400'}`}>
+      <div className={`flex items-center gap-1.5 ${positive ? 'text-mint' : 'text-neutral-500 dark:text-neutral-400'}`}>
         {icon === 'income' ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
         <span className="text-[10px] font-semibold uppercase tracking-wider">{label}</span>
       </div>

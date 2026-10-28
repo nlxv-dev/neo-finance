@@ -20,7 +20,7 @@ function todayDateInputValue(): string {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 }
 
-const FIELD_CLASS = 'min-h-12 w-full rounded-2xl neu-inset px-4 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus-visible:ring-2 focus-visible:ring-mint/50 dark:text-white';
+const FIELD_CLASS = 'min-h-12 w-full rounded-2xl neu-inset px-4 text-sm text-neutral-900 outline-none placeholder:text-neutral-400   dark:text-white';
 
 export function GoalEditSheet({ open, goal, canWrite, onClose, onSave, onDelete }: GoalEditSheetProps) {
   const [name, setName] = useState('');
@@ -86,7 +86,6 @@ export function GoalEditSheet({ open, goal, canWrite, onClose, onSave, onDelete 
     <BottomSheet
       open={open}
       onClose={onClose}
-      onEscape={() => (confirmDelete ? setConfirmDelete(false) : keyboardOpen ? setKeyboardOpen(false) : onClose())}
       onBackdropClick={() => (keyboardOpen ? setKeyboardOpen(false) : onClose())}
       onPanelClick={(event) => {
         if (!keyboardOpen) return;
@@ -144,11 +143,8 @@ export function GoalEditSheet({ open, goal, canWrite, onClose, onSave, onDelete 
                   <div className="flex items-baseline justify-center gap-1">
                     <AmountTrigger
                       value={targetDigits}
-                      onChange={(value) => setTargetDigits(value.replace(/\D/g, '').slice(0, 12))}
                       keyboardOpen={keyboardOpen}
                       onToggleKeyboard={() => setKeyboardOpen((value) => !value)}
-                      onOpenKeyboard={() => setKeyboardOpen(true)}
-                      onCloseKeyboard={() => setKeyboardOpen(false)}
                       label="Целевая сумма в рублях"
                       keyboardId="goal-target-keyboard"
                       showCurrency={false}
@@ -203,7 +199,7 @@ export function GoalEditSheet({ open, goal, canWrite, onClose, onSave, onDelete 
                           aria-pressed={iconName === option.name}
                           onClick={() => setIconName(option.name)}
                           disabled={!canWrite}
-                          className={`flex min-h-12 items-center justify-center rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint ${iconName === option.name ? 'bg-mint/15 text-mint ring-1 ring-mint/50' : 'neu-inset text-neutral-500 dark:text-neutral-300'}`}
+                          className={`flex min-h-12 items-center justify-center rounded-xl transition-colors ${iconName === option.name ? 'bg-mint/15 text-mint ring-1 ring-mint/50' : 'neu-inset text-neutral-500 dark:text-neutral-300'}`}
                         >
                           <IconRenderer name={option.name} className="h-5 w-5" />
                         </button>

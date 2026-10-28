@@ -1,3 +1,5 @@
+import { RECOVERY_KEYS } from '@/storage/storageKeys';
+
 export type StorageIssueKind =
   | 'corrupt-json'
   | 'invalid-data'
@@ -24,18 +26,6 @@ export type RawStorageReadResult =
   | { status: 'missing' }
   | { status: 'present'; value: string }
   | { status: 'unavailable'; issue: StorageIssue };
-
-const RECOVERY_KEYS = [
-  'fintrack-transactions',
-  'fintrack-accounts',
-  'fintrack-goals',
-  'neo_finance_categories',
-  'fintrack-user-name',
-  'fintrack-initial-balance',
-  'fintrack-monthly-budget',
-  'fintrack-theme',
-  'fintrack-background-style',
-] as const;
 
 export function readRawStorageValue(key: string): RawStorageReadResult {
   try {
@@ -148,32 +138,6 @@ export function writeStoredJson(key: string, value: unknown): StorageIssue | nul
     return null;
   } catch {
     return { key, kind: 'write-failed' };
-  }
-}
-
-export type PersistentStorageStatus = 'unsupported' | 'granted' | 'denied';
-
-/**
- * Просит браузер сохранить данные origin при нехватке места.
- * Браузер может проигнорировать или отклонить запрос, поэтому это best-effort.
- */
-export async function requestPersistentStorage(): Promise<PersistentStorageStatus> {
-  try {
-    if (
-      typeof navigator === 'undefined' ||
-      !navigator.storage?.persist ||
-      !navigator.storage?.persisted
-    ) {
-      return 'unsupported';
-    }
-
-    if (await navigator.storage.persisted()) {
-      return 'granted';
-    }
-
-    return (await navigator.storage.persist()) ? 'granted' : 'denied';
-  } catch {
-    return 'denied';
   }
 }
 

@@ -1,24 +1,13 @@
 import type { Transaction } from '@/data/mockData';
 import { createDefaultAccounts, MAIN_ACCOUNT_ID, normalizeStoredAccounts, type Account } from '@/data/accounts';
-import type { CustomCategory } from '@/hooks/useCategories';
-import type { BackgroundStyle, ThemeMode } from '@/hooks/useTheme';
+import type { CustomCategory } from '@/data/categories';
+import { LAST_BACKUP_KEY, STORAGE_KEYS } from '@/storage/storageKeys';
+export { LAST_BACKUP_KEY, STORAGE_KEYS } from '@/storage/storageKeys';
+import type { BackgroundStyle, ThemeMode } from '@/data/settings';
 import { normalizeStoredGoals, type Goal } from '@/data/goals';
 import { getTransactionRuleError, MAX_TRANSACTION_AMOUNT } from '@/data/transactionRules';
+import { getDatabaseBootstrapSnapshot, hasDatabaseBootstrap, persistCsvImport, persistLastBackupAt, queryDatabaseTransactions, readCurrentDatabaseSnapshot, restoreDatabaseSnapshot } from '@/storage/databaseStorage';
 
-// These historical browser-storage keys are intentionally preserved until a separate, tested migration exists.
-export const STORAGE_KEYS = {
-  transactions: 'fintrack-transactions',
-  accounts: 'fintrack-accounts',
-  goals: 'fintrack-goals',
-  categories: 'neo_finance_categories',
-  userName: 'fintrack-user-name',
-  initialBalance: 'fintrack-initial-balance',
-  monthlyBudget: 'fintrack-monthly-budget',
-  theme: 'fintrack-theme',
-  backgroundStyle: 'fintrack-background-style',
-} as const;
-
-export const LAST_BACKUP_KEY = 'neo-finance-last-backup';
 export const BACKUP_FORMAT = 'neo-finance-backup';
 export const BACKUP_SCHEMA_VERSION = 4;
 
@@ -325,15 +314,46 @@ function downloadBlob(filename: string, content: BlobPart, mimeType: string): vo
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function downloadJsonBackup(data: BackupData): string {
-  const backup = createBackupFile(data);
-  const date = new Date().toISOString();
+function downloadBackupFile(backup: BackupFile, mirrorLegacyTimestamp = !hasDatabaseBootstrap()): string {
+  const date = backup.exportedAt;
   downloadBlob(`neo-finance-backup-${date.slice(0, 10)}.json`, JSON.stringify(backup, null, 2), 'application/json;charset=utf-8');
-  try {
-    window.localStorage.setItem(LAST_BACKUP_KEY, date);
-  } catch {
-    // The file was still downloaded; backup metadata is optional.
+  if (mirrorLegacyTimestamp) {
+    try {
+      window.localStorage.setItem(LAST_BACKUP_KEY, date);
+    } catch {
+      // The file was still downloaded; the legacy timestamp mirror is optional.
+    }
   }
+  return date;
+}
+
+/** Synchronous compatibility path retained for isolated legacy-format tests. */
+export function downloadJsonBackup(data: BackupData): string {
+  const exportedAt = downloadBackupFile(createBackupFile(data), !hasDatabaseBootstrap());
+  if (hasDatabaseBootstrap()) void persistLastBackupAt(exportedAt).catch(() => undefined);
+  return exportedAt;
+}
+
+/** Creates a backup from one consistent IndexedDB snapshot, not stale React props. */
+export async function createDatabaseBackupFile(): Promise<BackupFile> {
+  const snapshot = await readCurrentDatabaseSnapshot();
+  return createBackupFile({
+    accounts: snapshot.accounts,
+    goals: snapshot.goals,
+    transactions: snapshot.transactions,
+    categories: snapshot.categories,
+    profile: { ...snapshot.profile },
+    settings: { ...snapshot.settings },
+  });
+}
+
+export async function downloadJsonBackupFromDatabase(): Promise<string> {
+  const backup = await createDatabaseBackupFile();
+  // Dexie owns the live backup timestamp. Do not write it into the frozen legacy snapshot.
+  const date = downloadBackupFile(backup, false);
+  // A failed optional timestamp write must not turn a successfully downloaded
+  // backup into a reported export failure.
+  await persistLastBackupAt(date).catch(() => undefined);
   return date;
 }
 
@@ -374,6 +394,13 @@ export function createTransactionsCsv(transactions: Transaction[]): string {
 
 export function downloadTransactionsCsv(transactions: Transaction[]): void {
   downloadBlob(`neo-finance-transactions-${new Date().toISOString().slice(0, 10)}.csv`, createTransactionsCsv(transactions), 'text/csv;charset=utf-8');
+}
+
+/** Exports the current ordered transaction rows directly from Dexie. */
+export async function downloadTransactionsCsvFromDatabase(): Promise<number> {
+  const transactions = await queryDatabaseTransactions();
+  downloadTransactionsCsv(transactions);
+  return transactions.length;
 }
 
 /** RFC 4180-compatible parser supporting quoted commas, doubled quotes, CRLF and line breaks inside fields. */
@@ -545,9 +572,12 @@ function writeStorageAtomically(entries: Array<[string, string]>): void {
   }
 }
 
-export function restoreJsonBackupToStorage(input: unknown): void {
+export function restoreJsonBackupToStorage(input: unknown): void | Promise<void> {
   const backup = validateBackupFile(input);
   const data = backup.data;
+  if (hasDatabaseBootstrap()) return restoreDatabaseSnapshot(data);
+  // The synchronous LocalStorage path is retained for isolated legacy-format tests
+  // and recovery utilities. The running application always uses the Dexie path.
   writeStorageAtomically([
     [STORAGE_KEYS.transactions, JSON.stringify(data.transactions)],
     [STORAGE_KEYS.accounts, JSON.stringify(data.accounts)],
@@ -613,7 +643,7 @@ export function importCsvTransactionsToStorage(
   mode: CsvImportMode,
   availableAccounts: readonly Account[],
   csvSchemaVersion: 1 | 2,
-): { importedCount: number; skippedCount: number } {
+): { importedCount: number; skippedCount: number } | Promise<{ importedCount: number; skippedCount: number }> {
   if (importedTransactions.length > MAX_IMPORT_TRANSACTIONS) {
     throw new Error(`Слишком много транзакций. Максимум — ${MAX_IMPORT_TRANSACTIONS}.`);
   }
@@ -675,14 +705,18 @@ export function importCsvTransactionsToStorage(
     transactions = [...mapped.transactions, ...existingTransactions];
   }
 
+  const result = { importedCount: mapped.transactions.length, skippedCount };
+  if (hasDatabaseBootstrap()) return persistCsvImport(transactions, mapped.categories).then(() => result);
   writeStorageAtomically([
     [STORAGE_KEYS.categories, JSON.stringify(mapped.categories)],
     [STORAGE_KEYS.transactions, JSON.stringify(transactions)],
   ]);
-  return { importedCount: mapped.transactions.length, skippedCount };
+  return result;
 }
 
 export function readLastBackupAt(): string | null {
+  const snapshot = getDatabaseBootstrapSnapshot();
+  if (snapshot) return snapshot.lastBackupAt;
   try {
     return window.localStorage.getItem(LAST_BACKUP_KEY);
   } catch {

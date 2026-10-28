@@ -6,7 +6,7 @@ export default {
     extend: {
       colors: {
         mint: {
-          DEFAULT: '#4ADE80',
+          DEFAULT: '#05D9A4',
         },
         indigoblue: '#6366F1',
         amoled: '#000000',
